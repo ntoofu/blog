@@ -14,7 +14,7 @@ paginate = 20
 # disqusShortname = ""
 
 # Edit this if you want to translate your blog
-defaultContentLanguage = "ja"
+defaultContentLanguage = "en"
 
 # Code Highlighting (Chroma)
 pygmentsCodeFences = true
@@ -70,5 +70,5 @@ pygmentsUseClasses = true
 	twitter = "https://twitter.com/ntoofu"
 
 [frontmatter]
-	date = [":filename", ":default"]
+	date = [":filename", "date", ":default"]
 	lastmod = ["lastmod", ":git", ":fileModTime", ":default"]
