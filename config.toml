@@ -1,7 +1,10 @@
-baseURL = "ntoofu.github.io"
 title = "ntoofu"
 theme = "manis"
 enableGitInfo = true
+
+# Use GitHub Pages
+baseURL = "https://ntoofu.github.io/blog/"
+publishDir = "docs"
 
 # Copyright notice. Note: You can use HTML tag here
 copyright = "&copy; 2018 ntoofu"
