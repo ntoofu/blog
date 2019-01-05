@@ -1,22 +1,15 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes" ?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Blogs on </title>
-    <link>/blog/</link>
-    <description>Recent content in Blogs on </description>
+    <title>Posts on ntoofu</title>
+    <link>ntoofu.github.io/blog/</link>
+    <description>Recent content in Posts on ntoofu</description>
     <generator>Hugo -- gohugo.io</generator>
+    <copyright>&amp;copy; 2018 ntoofu</copyright>
+    <lastBuildDate>Fri, 04 Jan 2019 00:17:21 +0900</lastBuildDate>
     
-	<atom:link href="/blog/index.xml" rel="self" type="application/rss+xml" />
+	<atom:link href="ntoofu.github.io/blog/index.xml" rel="self" type="application/rss+xml" />
     
-    
-    <item>
-      <title>test</title>
-      <link>/blog/test/</link>
-      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
-      
-      <guid>/blog/test/</guid>
-      <description> テスト です  def hoge(): pass  </description>
-    </item>
     
   </channel>
 </rss>
