@@ -2,13 +2,13 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>About on ntoofu</title>
-    <link>https://ntoofu.github.io/blog/about/</link>
+    <link>https://ntoofu.github.io/about/</link>
     <description>Recent content in About on ntoofu</description>
     <generator>Hugo -- gohugo.io</generator>
     <copyright>&amp;copy; 2018 ntoofu</copyright>
     <lastBuildDate>Fri, 04 Jan 2019 00:19:44 +0900</lastBuildDate>
     
-	<atom:link href="https://ntoofu.github.io/blog/about/index.xml" rel="self" type="application/rss+xml" />
+	<atom:link href="https://ntoofu.github.io/about/index.xml" rel="self" type="application/rss+xml" />
     
     
   </channel>
