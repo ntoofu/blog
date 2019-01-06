@@ -46,7 +46,7 @@ pygmentsUseClasses = true
     # licenseURL = "/about/license"
 
 	# Configure which section for Latest Posts
-	postSection = "blog"
+	postSection = "post"
 	# Configure which section for Latest Works
 	workSection = "work"
 
