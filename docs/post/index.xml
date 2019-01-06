@@ -2,21 +2,21 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Posts on ntoofu</title>
-    <link>https://ntoofu.github.io/blog/blog/</link>
+    <link>https://ntoofu.github.io/blog/post/</link>
     <description>Recent content in Posts on ntoofu</description>
     <generator>Hugo -- gohugo.io</generator>
     <copyright>&amp;copy; 2018 ntoofu</copyright>
     <lastBuildDate>Fri, 04 Jan 2019 00:17:21 +0900</lastBuildDate>
     
-	<atom:link href="https://ntoofu.github.io/blog/blog/index.xml" rel="self" type="application/rss+xml" />
+	<atom:link href="https://ntoofu.github.io/blog/post/index.xml" rel="self" type="application/rss+xml" />
     
     
     <item>
       <title>GitHub Pagesの利用を再開した</title>
-      <link>https://ntoofu.github.io/blog/blog/github-pages/</link>
+      <link>https://ntoofu.github.io/blog/post/github-pages/</link>
       <pubDate>Sun, 06 Jan 2019 00:00:00 +0000</pubDate>
       
-      <guid>https://ntoofu.github.io/blog/blog/github-pages/</guid>
+      <guid>https://ntoofu.github.io/blog/post/github-pages/</guid>
       <description>元々GitHub Pagesを使ってコンピュータ関連の技術系のブログ（所謂技術ブログ）を公開しようと 1年ぐらい前にやっていて、実際Jekyllで書けるようにするところまではやっていた。 が、特に何も書かずに放置してしまっていたので、整備し直すついでにHugoに乗り換えた。 （markdownのドキュメントをHugoでHTMLにして見るようにするということを業務でやっていて、 両方を触るのが面倒だったため）
 大事なのは記事をちゃんと書くことで、今までは何か書くことが出来たらーという気持ちで 構えていたのが良くなかったなと思う。これ以上やることはないというぐらいに やり尽くしたり学び尽くすなどという事は大体の事柄に対してあり得ないので、 やりきってから書くつもりだと中々その時が訪れない。 最低月1つは何か書くことにする。
 また、調べたことをまとめて記事にすることも当初は考えていたが、いざとなると 「自分もネットで調べて知識を得ているのだから、まとめて書いたところで新規性も無いただの劣化コピーになるだけ」 と思ってしまい書く気にならなかった。 しかし、GitHub Pagesで書いてサクッと公開するぐらいならSEO的にもそんなに人目に触れないと思うので、 本当に私的なメモを（見ようと思えば）誰にでも見れる場所に置いているだけ、という気持ちで取り組もうと思う。
