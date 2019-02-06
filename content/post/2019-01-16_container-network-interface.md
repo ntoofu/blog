@@ -1,12 +1,10 @@
 +++
 title = "Container Network Interfaceについて調べた"
-date = "2019-01-13T02:57:28+09:00"
-draft = true
+date = "2019-02-06T21:56:41+09:00"
 +++
 
-社内のKubernetes勉強会に参加しており, 去年の夏頃からContainer Network Interface (CNI)に
-関心があったのでその説明をすることになった。
-その際の資料をここに書いておく。
+社内のKubernetes勉強会で, 前より関心のあった Container Network Interface (CNI) の説明を
+することになった。その際の資料をここに書いておく。
 
 
 ## Container Network Interface (CNI) の基本
@@ -53,11 +51,11 @@ draft = true
 {{< mermaid align="left" >}}
 graph TD
   subgraph host
-    subgraph container(netns) A
+    subgraph container_A
       if_a1[NIC]
       if_a2[NIC]
     end
-    subgraph container(netns) B
+    subgraph container_B
       if_b1[NIC]
     end
   end
@@ -249,12 +247,15 @@ sequenceDiagram
 * Pod間(Node内, Node間): PodについたIPアドレスで通信できる
 * 要件を満たす範囲で, 実装は[複数](https://kubernetes.io/docs/concepts/cluster-administration/addons/)ある
 
+### CNIの利用
 
-### ユースケース
-
-* kubeletのNetworkPluginとして
-  * ???
-* NetworkAttachmentDefinition
+* kubeletのNetworkPluginとして, Pod作成等の際に実行される
+    * `--network-plugin=cni` が設定された場合, 設定ファイル (デフォルト: `/etc/cni/net.d/`) から
+      CNIのnetwork configuration listを読み出して利用
+* CNI pluginによってはPodにコントローラとして機能するコンテナを配置する必要があり,
+  `DaemonSet` により設置する
+* Pod間のACLとして機能する `NetworkPolicy` はnetwork pluginに実装を任せているため,
+  pluginによってサポート有無が異なる
 
 ### 利用方法
 
@@ -272,9 +273,41 @@ sequenceDiagram
 * [Flannel CNI plugin](https://github.com/containernetworking/plugins/tree/master/plugins/meta/flannel)
   は Flannelのネットワーク情報を反映したconfigを生成して `bridge` CNI pluginなどを呼び出すだけ
   * デフォルトでは, `bridge` CNI plugin + `host-local` IPAM plugin を呼び出す
-* 通常の設定では, node内のbridgeネットワーク `cbr0` にそれぞれ異なるsubnetが割り当てられるが,
+* 通常の設定では, node内のbridgeネットワーク `cni0` にそれぞれ異なるsubnet(`/24`)が割り当てられるが,
   nodeからはFlunnelの仮想I/Fを通じてL2接続しているように見える
-  * Nodeの異なるPod間ではL2の接続性は無い？（多分）
+  * Nodeの異なるPod間でL2 broadcast domainが同じ、というわけではない様子
+    ( `arping` が通じない事を確認 )
+* [これ](https://qiita.com/sugimount/items/ed07a3e77a6d4ab409a8)が非常に詳しいが,
+  メカニズムは雑には以下の通り
+
+    {{< mermaid align="left" >}}
+    graph TD
+      subgraph host
+        subgraph container_A
+          a_eth0["eth0 / 10.224.1.2"]
+        end
+        subgraph container_B
+          b_eth0["eth0 / 10.224.1.3"]
+        end
+        a_veth[veth]
+        b_veth[veth]
+        cni0("cni0 (bridge) / 10.224.1.1")
+        flannel0["flannel.0 / 10.224.1.0"]
+        eth0[eth0]
+      end
+      a_eth0 === a_veth
+      b_eth0 === b_veth
+      a_veth === cni0
+      b_veth === cni0
+      a_eth0 -- forward --> cni0
+      b_eth0 -- forward --> cni0
+      cni0 -- forward --> flannel0
+      flannel0 -- encapsulate & forward --> eth0
+    {{< /mermaid >}}
+  * Containerのroute table の default gatewayは `cni0` の IP を向く
+  * Hostには, flannelが利用するネットワーク全体(別host用に割り当てられたsubnetも含む)について
+    `flannel.0` のIPに転送するrouteが設定される
+* Network policy 非対応
 
 ### Project Calico
 
@@ -283,12 +316,15 @@ sequenceDiagram
   * パフォーマンス面での優位性(カプセル化しないため)
   * 物理機器との連携 (e.g. [CalicoによるKubernetesピュアL3ネットワーキング](https://techblog.yahoo.co.jp/infrastructure/kubernetes_calico_networking/))
   * IPベースのアクセス制御がしやすい
+* Network policy 対応
 
 ### Multus
 
 * Container(netns)内に複数のI/Fを作るためのplugin
 * 設定に基づいて他のCNI pluginを呼び出すCNI plugin
-* Network Function Virtualization方面からの需要？
+* Kubernetes環境では, `NetworkAttachmentDefinition` という Custom Resource Definition を利用して,
+  Podごとに指定したネットワークに接続できるようになる
+* (Network Function Virtualization方面からの需要？)
 
 ## 参考にした情報源まとめ
 * [containernetworking/cni](https://github.com/containernetworking/cni): CNIのGitHub rpository
@@ -301,9 +337,3 @@ sequenceDiagram
 * [Attaching To Multiple Networks](https://kubevirt.io/2018/attaching-to-multiple-networks.html)NetworkAttachmentDefinitionまわりの説明を含む
 * [FlannelのVXLANバックエンドの仕組み](http://enakai00.hatenablog.com/entry/2015/04/02/173739): Flannel自体の動きについてわかりやすい
 * [Kubernetes Network Deep Dive (NodePort, ClusterIP, Flannel)](https://qiita.com/sugimount/items/ed07a3e77a6d4ab409a8): KubernetesにおけるFlannelの挙動を細かく説明している
-
-## 調べ足りないこと
-
-* kube-proxy mode
-* network policy
-
