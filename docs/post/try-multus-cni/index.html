@@ -10,6 +10,7 @@
 （盛んに開発されているため, 執筆時から内容が変わっている可能性があるので注意）
 Multus CNI について  CNI plugin を複数呼び出すことで, container に複数のNetwork interfaceを与えるCNI plugin Kubernetes と連携し, Pod の Manifest に応じて利用するNetworkを切り替えたりも可能  Kubernetes連携時の動作の仕組み  各ノードのCNI設定ファイル(デフォルト: /etc/cni/net.d/)を設定し, Multusが呼び出されるようにする  現時点ではDaemonSetとして作成したPodを使ってノードに対するCNI設定ファイル配置を実現している  nfvpe/multus というコンテナイメージに, 設定ファイルを配置するべきホストのディレクトリを volumeとしてマウントさせる 設定内容はコンテナ内のファイルにあるので必要に応じてdaemon用コンテナにConfigMapを volumeマウントさせる  半年ほど前に触ったときは, ホスト側の設定(/etc/cni/net.d/)を直接編集する手順が案内されていた (と思う)ので, また変わるかもしれない  軽く見た限り, Calicoやflannelも同じようなことをしていそう   各ノードにMultusを含む利用したいCNI pluginバイナリを配置しておき, KubeletがMultusを呼び出し, Multusが1つ以上のCNI pluginを呼び出す  Multus CNI pluginのバイナリ配置については前述の DaemonSet がやってくれる  Podには必ず1つ共通のネットワーク (=&ldquo;Default network&rdquo;) が eth0 として設定される  おそらくKubernetesのPod Networkとしての要件を満たすため  Custom Resource Definition (CRD) という Kubenetes が提供しているAPI拡張の仕組みを利用し, Default network以外のネットワークを定義し, PodはManifestにてこれを指定する Multus CNI pluginはそれ自体がKubernetes APIを呼び出し, CRDを参照してネットワークに対して どのCNI pluginをどういうconfigで呼び出すかを決定する  セットアップ ここでは, kubeadm のインストールが完了し, Kubenetesクラスタ構築直前の状態からの構築を想定する。 (Creating a single master cluster with kubeadmの, &ldquo;Installing a pod network add-on&rdquo; の直前の状態) 今回, Default networkにはProject Calicoを利用してみる。">
 
+		<meta name="google-site-verification" content="-dM2-3-X8FeQrDaA7h-n_6oJ7drfIg3AD4AjEvr6LGw" />
 
 		
 		
