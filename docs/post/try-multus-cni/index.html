@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<meta name="generator" content="Hugo 0.53" />
+		<title>Multus CNI pluginをKubernetesで試した - ntoofu</title>
+
+		<meta name="description" content="先日の記事でも軽くふれた Multus CNI plugin を実際に使ってみた。
+（盛んに開発されているため, 執筆時から内容が変わっている可能性があるので注意）
+Multus CNI について  CNI plugin を複数呼び出すことで, container に複数のNetwork interfaceを与えるCNI plugin Kubernetes と連携し, Pod の Manifest に応じて利用するNetworkを切り替えたりも可能  Kubernetes連携時の動作の仕組み  各ノードのCNI設定ファイル(デフォルト: /etc/cni/net.d/)を設定し, Multusが呼び出されるようにする  現時点ではDaemonSetとして作成したPodを使ってノードに対するCNI設定ファイル配置を実現している  nfvpe/multus というコンテナイメージに, 設定ファイルを配置するべきホストのディレクトリを volumeとしてマウントさせる 設定内容はコンテナ内のファイルにあるので必要に応じてdaemon用コンテナにConfigMapを volumeマウントさせる  半年ほど前に触ったときは, ホスト側の設定(/etc/cni/net.d/)を直接編集する手順が案内されていた (と思う)ので, また変わるかもしれない  軽く見た限り, Calicoやflannelも同じようなことをしていそう   各ノードにMultusを含む利用したいCNI pluginバイナリを配置しておき, KubeletがMultusを呼び出し, Multusが1つ以上のCNI pluginを呼び出す  Multus CNI pluginのバイナリ配置については前述の DaemonSet がやってくれる  Podには必ず1つ共通のネットワーク (=&ldquo;Default network&rdquo;) が eth0 として設定される  おそらくKubernetesのPod Networkとしての要件を満たすため  Custom Resource Definition (CRD) という Kubenetes が提供しているAPI拡張の仕組みを利用し, Default network以外のネットワークを定義し, PodはManifestにてこれを指定する Multus CNI pluginはそれ自体がKubernetes APIを呼び出し, CRDを参照してネットワークに対して どのCNI pluginをどういうconfigで呼び出すかを決定する  セットアップ ここでは, kubeadm のインストールが完了し, Kubenetesクラスタ構築直前の状態からの構築を想定する。 (Creating a single master cluster with kubeadmの, &ldquo;Installing a pod network add-on&rdquo; の直前の状態) 今回, Default networkにはProject Calicoを利用してみる。">
+
+
+		
+		
+		
+        <link rel="stylesheet" href="https://ntoofu.github.io/blog/css/ui.min.css"/>
+		
+		
+		
+
+		<link  rel="stylesheet" href="https://fonts.googleapis.com/css?family=Fira+Mono|Lato|Raleway">
+
+		
+
+		<style>
+	a { color: #2c6be0; }
+	blockquote {
+		border-left-color: #2c6be0;
+		border-right-color: #2c6be0; }
+	.bar a:hover {
+		color: #2c6be0;
+		text-decoration: none; }
+	.sep {
+		margin-top: 2rem;
+		margin-bottom: 1rem;
+		margin-left:0;
+		width: 24rem;
+		border-top: 2px solid #2c6be0; }
+</style>
+
+	</head>
+
+<body>
+<header class="container no-print">
+	<div class="u-header">
+		<nav class="bar">
+	<ul><li>
+			<a href="https://ntoofu.github.io/blog/">
+                <img class="icon-text" src="https://ntoofu.github.io/blog/img/prev.svg"/>
+			</a>
+		</li><li><a href="https://ntoofu.github.io/blog/about/">About</a></li><li><a href="https://ntoofu.github.io/blog/post/">Posts</a></li><li><a href="https://ntoofu.github.io/blog/work/">Works</a></li></ul>
+</nav>
+
+	</div>
+</header>
+<main class="container">
+
+<article>
+	<header><hgroup id="brand">
+	<h1>Multus CNI pluginをKubernetesで試した</h1>
+	<h5>
+		
+		<time datetime="2019-02-10 00:00:00 &#43;0000 UTC">2019-02-10</time>
+		<span class="no-print">
+			<span>
+	</h5>
+	
+</hgroup>
+<hr class="sep" />
+</header>
+	
+
+<p><a href="https://ntoofu.github.io/blog/post/container-network-interface/">先日の記事</a>でも軽くふれた <a href="https://github.com/intel/multus-cni">Multus CNI plugin</a> を実際に使ってみた。</p>
+
+<p>（盛んに開発されているため, 執筆時から内容が変わっている可能性があるので注意）</p>
+
+<h2 id="multus-cni-について">Multus CNI について</h2>
+
+<ul>
+<li>CNI plugin を複数呼び出すことで, container に複数のNetwork interfaceを与えるCNI plugin</li>
+<li>Kubernetes と連携し, Pod の Manifest に応じて利用するNetworkを切り替えたりも可能</li>
+</ul>
+
+<h3 id="kubernetes連携時の動作の仕組み">Kubernetes連携時の動作の仕組み</h3>
+
+<ul>
+<li>各ノードのCNI設定ファイル(デフォルト: <code>/etc/cni/net.d/</code>)を設定し, Multusが呼び出されるようにする
+
+<ul>
+<li>現時点では<code>DaemonSet</code>として作成したPodを使ってノードに対するCNI設定ファイル配置を実現している
+
+<ul>
+<li><code>nfvpe/multus</code> というコンテナイメージに, 設定ファイルを配置するべきホストのディレクトリを
+volumeとしてマウントさせる</li>
+<li>設定内容はコンテナ内のファイルにあるので必要に応じてdaemon用コンテナに<code>ConfigMap</code>を
+volumeマウントさせる</li>
+</ul></li>
+<li>半年ほど前に触ったときは, ホスト側の設定(<code>/etc/cni/net.d/</code>)を直接編集する手順が案内されていた
+(と思う)ので, また変わるかもしれない
+
+<ul>
+<li>軽く見た限り, Calicoやflannelも同じようなことをしていそう</li>
+</ul></li>
+</ul></li>
+<li>各ノードにMultusを含む利用したいCNI pluginバイナリを配置しておき, KubeletがMultusを呼び出し,
+Multusが1つ以上のCNI pluginを呼び出す
+
+<ul>
+<li>Multus CNI pluginのバイナリ配置については前述の <code>DaemonSet</code> がやってくれる</li>
+</ul></li>
+<li>Podには必ず1つ共通のネットワーク (=&ldquo;Default network&rdquo;) が <code>eth0</code> として設定される
+
+<ul>
+<li>おそらくKubernetesのPod Networkとしての要件を満たすため</li>
+</ul></li>
+<li>Custom Resource Definition (CRD) という Kubenetes が提供しているAPI拡張の仕組みを利用し,
+Default network以外のネットワークを定義し, PodはManifestにてこれを指定する</li>
+<li>Multus CNI pluginはそれ自体がKubernetes APIを呼び出し, CRDを参照してネットワークに対して
+どのCNI pluginをどういうconfigで呼び出すかを決定する</li>
+</ul>
+
+<h2 id="セットアップ">セットアップ</h2>
+
+<p>ここでは, <code>kubeadm</code> のインストールが完了し, Kubenetesクラスタ構築直前の状態からの構築を想定する。
+(<a href="https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/">Creating a single master cluster with kubeadm</a>の, &ldquo;Installing a pod network add-on&rdquo; の直前の状態)
+今回, Default networkには<a href="https://www.projectcalico.org/">Project Calico</a>を利用してみる。</p>
+
+<p>基本的には <a href="https://github.com/intel/multus-cni/blob/master/doc/quickstart.md">Quickstart Guide</a>
+(<a href="https://github.com/intel/multus-cni/blob/515e7eb92c14e014a8d239f511591d8eaea5f245/doc/quickstart.md">執筆時のバージョン</a>)
+に従って進める。</p>
+
+<h3 id="master-node-構築">Master node 構築</h3>
+
+<ul>
+<li><p>通常通り <code>kubeadm init</code> により構築するが,
+後述の理由により <code>--pod-network-cidr=172.18.0.0/16</code> を指定する</p>
+
+<pre><code>  qwert@k8s-master-1:~$ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  (略)
+  Your Kubernetes master has initialized successfully!
+  (略)
+</code></pre>
+
+<pre><code>  qwert@k8s-master-1:~$ mkdir -p $HOME/.kube
+  qwert@k8s-master-1:~$ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  qwert@k8s-master-1:~$ sudo chown $(id -u):$(id -g) $HOME/.kube/config
+</code></pre></li>
+</ul>
+
+<h3 id="daemonsetの設定">DaemonSetの設定</h3>
+
+<ul>
+<li><p>執筆時点ではCalico用の設定例は<a href="https://github.com/intel/multus-cni/issues/227">このIssue</a>で
+議論されている段階のため, その中で提案されている例を借用することにする</p>
+
+<ul>
+<li><p><a href="https://raw.githubusercontent.com/project-azorian/poc-multus-calico/c5beb3139fdde2182a5c14554a719144311c05b2/manifests/calico/multus.yaml">Multus関連のManifest</a>を用いて
+Multusに必要なCRD, RBAC, DaemonSetを設定</p>
+
+<pre><code>qwert@k8s-master-1:~$ kubectl apply -f https://raw.githubusercontent.com/project-azorian/poc-multus-calico/c5beb3139fdde2182a5c14554a719144311c05b2/manifests/calico/multus.yaml
+customresourcedefinition.apiextensions.k8s.io/network-attachment-definitions.k8s.cni.cncf.io created
+clusterrole.rbac.authorization.k8s.io/multus created
+clusterrolebinding.rbac.authorization.k8s.io/multus created
+serviceaccount/multus created
+configmap/multus-cni-config created
+daemonset.extensions/kube-multus-ds-amd64 created
+</code></pre></li>
+
+<li><p><a href="https://raw.githubusercontent.com/project-azorian/poc-multus-calico/c5beb3139fdde2182a5c14554a719144311c05b2/manifests/calico/calico.yaml">Calico関連のManifest</a>を用いて
+Calicoに必要なRBAC, DaemonSetを設定</p>
+
+<pre><code>qwert@k8s-master-1:~$ kubectl apply -f https://raw.githubusercontent.com/project-azorian/poc-multus-calico/c5beb3139fdde2182a5c14554a719144311c05b2/manifests/calico/calico.yaml
+configmap/calico-config created
+service/calico-typha created
+deployment.apps/calico-typha created
+poddisruptionbudget.policy/calico-typha created
+daemonset.extensions/calico-node created
+serviceaccount/calico-node created
+customresourcedefinition.apiextensions.k8s.io/felixconfigurations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/bgppeers.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/bgpconfigurations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/ippools.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/hostendpoints.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/clusterinformations.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/globalnetworkpolicies.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/globalnetworksets.crd.projectcalico.org created
+customresourcedefinition.apiextensions.k8s.io/networkpolicies.crd.projectcalico.org created
+clusterrole.rbac.authorization.k8s.io/calico-node created
+clusterrolebinding.rbac.authorization.k8s.io/calico-node created
+</code></pre>
+
+<ul>
+<li>この YAML の中身をみるとわかるが, この中で <code>172.18.0.0/16</code> を指定しているため,
+<code>kubeadm init</code> 時に <code>--pod-network-cidr=172.18.0.0/16</code> を指定した</li>
+</ul></li>
+</ul></li>
+</ul>
+
+<h3 id="nodeの追加">Nodeの追加</h3>
+
+<ul>
+<li><p>通常通りNodeを追加 (<code>k8s-node-2</code> も同様に実施し, workload用のnodeを2つ追加した)</p>
+
+<pre><code>qwert@k8s-node-1:~$ sudo kubeadm join 172.31.253.102:6443 --token XXXX --discovery-token-ca-cert-hash sha256:xxxxxx
+(略)
+This node has joined the cluster:
+(略)
+</code></pre></li>
+
+<li><p>Nodeの追加を確認</p>
+
+<pre><code>qwert@k8s-master-1:~$ kubectl get node
+NAME           STATUS   ROLES    AGE    VERSION
+k8s-master-1   Ready    master   29m    v1.13.2
+k8s-node-1     Ready    &lt;none&gt;   2m2s   v1.13.2
+k8s-node-2     Ready    &lt;none&gt;   34s    v1.13.2
+</code></pre></li>
+</ul>
+
+<h3 id="pod作成">Pod作成</h3>
+
+<ul>
+<li><p>まず, 追加ネットワークの指定をせずに(=Multus固有の設定無しに)Podを作成してみる</p>
+
+<pre><code>qwert@k8s-master-1:~$ cat test-pod1.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod1
+spec:
+  containers:
+    - name: alpine
+      image: alpine:latest
+      command: [&quot;/usr/bin/tail&quot;]
+      args: [&quot;-f&quot;, &quot;/dev/null&quot;]
+
+qwert@k8s-master-1:~$ kubectl apply -f test-pod1.yaml
+pod/test-pod1 created
+
+qwert@k8s-master-1:~$ kubectl exec -i -t test-pod1 /bin/sh
+/ # ip a
+1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: tunl0@NONE: &lt;NOARP&gt; mtu 1480 qdisc noop state DOWN qlen 1000
+    link/ipip 0.0.0.0 brd 0.0.0.0
+4: eth0@if5: &lt;BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN&gt; mtu 1440 qdisc noqueue state UP
+    link/ether ae:12:ce:ec:49:0c brd ff:ff:ff:ff:ff:ff
+    inet 172.18.2.2/32 scope global eth0
+       valid_lft forever preferred_lft forever
+</code></pre>
+
+<ul>
+<li>Calicoが用意したインターフェイスとアドレスが見えている</li>
+
+<li><p>外部からも実際に疎通する</p>
+
+<pre><code>$ ping 172.18.2.2
+PING 172.18.2.2 (172.18.2.2) 56(84) bytes of data.
+64 bytes from 172.18.2.2: icmp_seq=1 ttl=63 time=0.495 ms
+64 bytes from 172.18.2.2: icmp_seq=2 ttl=63 time=0.374 ms
+64 bytes from 172.18.2.2: icmp_seq=3 ttl=63 time=0.355 ms
+</code></pre>
+
+<ul>
+<li>ここでは サブネット <code>172.18.2.0/24</code> に対し, それが割り当てられたnodeのnode IPに転送するよう
+ping実行元ホストにルートを追加して試している</li>
+</ul></li>
+</ul></li>
+
+<li><p>Multusが使用する, CNI pluginに指定するネットワークの設定を
+CRDである <code>NetworkAttachmentDefinition</code> として作成する</p>
+
+<pre><code>qwert@k8s-master-1:~$ cat test-network.yaml
+apiVersion: &quot;k8s.cni.cncf.io/v1&quot;
+kind: NetworkAttachmentDefinition
+metadata:
+  name: test-network
+spec:
+  config: &gt;
+    {
+        &quot;cniVersion&quot;: &quot;0.3.0&quot;,
+        &quot;type&quot;: &quot;bridge&quot;,
+        &quot;bridge&quot;: &quot;test-br&quot;,
+        &quot;ipam&quot;: {
+            &quot;type&quot;: &quot;host-local&quot;,
+            &quot;subnet&quot;: &quot;192.168.1.0/24&quot;,
+            &quot;rangeStart&quot;: &quot;192.168.1.100&quot;,
+            &quot;rangeEnd&quot;: &quot;192.168.1.200&quot;
+        }
+    }
+qwert@k8s-master-1:~$ kubectl apply -f test-network.yaml
+networkattachmentdefinition.k8s.cni.cncf.io/test-network created
+</code></pre></li>
+
+<li><p>作成した <code>NetworkAttachmentDefinition</code> を利用するように
+Manifestの <code>annotation</code> に指定を追加して, Podを作成</p>
+
+<pre><code>qwert@k8s-master-1:~$ cat test-pod2.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod2
+  annotations:
+    k8s.v1.cni.cncf.io/networks: test-network
+spec:
+  containers:
+    - name: alpine
+      image: alpine:latest
+      command: [&quot;/usr/bin/tail&quot;]
+      args: [&quot;-f&quot;, &quot;/dev/null&quot;]
+qwert@k8s-master-1:~$ kubectl apply -f test-pod2.yaml
+pod/test-pod2 created
+qwert@k8s-master-1:~$ kubectl exec -i -t test-pod2 /bin/sh
+/ # ip a
+1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: tunl0@NONE: &lt;NOARP&gt; mtu 1480 qdisc noop state DOWN qlen 1000
+    link/ipip 0.0.0.0 brd 0.0.0.0
+4: eth0@net1: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1440 qdisc noqueue state UP
+    link/ether 4a:47:7d:a9:1f:dd brd ff:ff:ff:ff:ff:ff
+    inet 172.18.2.3/32 scope global eth0
+       valid_lft forever preferred_lft forever
+6: net1@if8: &lt;BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN&gt; mtu 1500 qdisc noqueue state UP
+    link/ether 0a:58:c0:a8:01:64 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.1.100/24 scope global net1
+       valid_lft forever preferred_lft forever
+</code></pre>
+
+<ul>
+<li>Calicoにより作成されるインターフェイスの他に, <code>net1</code> というインターフェイスが作成されている</li>
+
+<li><p>Podが配置されたnodeを見ると, <code>bridge</code> CNI pluginの期待通りの動きをしているとわかる</p>
+
+<ul>
+<li><p>bridgeインターフェイスが作成されている</p>
+
+<pre><code>qwert@k8s-node-2:~$ ip link | grep test-br
+7: test-br: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+8: vethc623a4a8@if6: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc noqueue master test-br state UP mode DEFAULT group default
+</code></pre></li>
+
+<li><p>netnsid = 1 で index = 6 のインターフェイスはbridgeインターフェイスにつながっている</p>
+
+<pre><code>qwert@k8s-node-2:~$ brctl show
+bridge name bridge id       STP enabled interfaces
+docker0     8000.0242175d8c92   no      
+test-br     8000.ae9d5b977edb   no      vethc623a4a8
+
+qwert@k8s-node-2:~$ ip link show vethc623a4a8
+8: vethc623a4a8@if6: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc noqueue master test-br state UP mode DEFAULT group default 
+    link/ether ae:9d:5b:97:7e:db brd ff:ff:ff:ff:ff:ff link-netnsid 1
+</code></pre></li>
+
+<li><p>作成したPodがまさに netnsid = 1 であり, index = 6 のインターフェイスは <code>net1</code></p>
+
+<pre><code>qwert@k8s-node-2:~$ sudo docker ps | grep test-pod2
+6e8321489147        alpine                 &quot;/usr/bin/tail -f /d…&quot;   25 minutes ago      Up 25 minutes                           k8s_alpine_test-pod2_default_c6c519e0-2cb5-11e9-85f2-0050569dc4a8_0
+fb09adadbf12        k8s.gcr.io/pause:3.1   &quot;/pause&quot;                 25 minutes ago      Up 25 minutes                           k8s_POD_test-pod2_default_c6c519e0-2cb5-11e9-85f2-0050569dc4a8_0
+
+qwert@k8s-node-2:~$ sudo docker inspect 6e8321489147 | grep -w Pid
+            &quot;Pid&quot;: 28483,
+
+qwert@k8s-node-2:~$ sudo ln -s /proc/28483/ns/net /var/run/netns/test-pod2
+
+qwert@k8s-node-2:~$ sudo ip netns list
+test-pod2 (id: 1)
+
+qwert@k8s-node-2:~$ sudo ip netns exec test-pod2 ip link
+1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: tunl0@NONE: &lt;NOARP&gt; mtu 1480 qdisc noop state DOWN mode DEFAULT group default qlen 1000
+    link/ipip 0.0.0.0 brd 0.0.0.0
+4: eth0@if6: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1440 qdisc noqueue state UP mode DEFAULT group default
+    link/ether 4a:47:7d:a9:1f:dd brd ff:ff:ff:ff:ff:ff link-netnsid 0
+6: net1@if8: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc noqueue state UP mode DEFAULT group default
+    link/ether 0a:58:c0:a8:01:64 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+</code></pre></li>
+</ul></li>
+</ul></li>
+</ul>
+
+<h2 id="所感">所感</h2>
+
+<ul>
+<li>Multusを使えば簡単に複数NICを持つPodを作れる
+
+<ul>
+<li>セットアップしたら, <code>NetworkAttachmentDefinition</code> としてネットワーク設定を作成して,
+<code>Pod</code> に対し利用したいネットワークを <code>annotation</code> として指定するだけ</li>
+</ul></li>
+<li>セットアップもだいぶ簡単になっているし, 設定例等ドキュメント関連の整備も進んできており,
+ますます手を出しやすくなりそう</li>
+<li>今回はお試しで <code>bridge</code> pluginを使ったが, 使い途は色々ありそう
+
+<ul>
+<li><code>vlan</code> plugin等を使って物理環境とLayer2で接続できるPodを作るとか&hellip;</li>
+<li>ソフトウェアルーターをPodとして作るとか&hellip;</li>
+<li>ホストの物理NICを直接Podに使わせたい場合とかにも便利なのかもしれない</li>
+</ul></li>
+</ul>
+
+</article>
+<nav class="no-print post-nav">
+
+	<a class="prev-post" href="https://ntoofu.github.io/blog/post/container-network-interface/">
+        <img class="icon-text" src="https://ntoofu.github.io/blog/img/prev.svg"/>Container Network Interfaceについて調べた</a>
+
+
+</nav>
+
+
+
+
+			<hr class="sep" />
+		</main>
+		<footer class="container no-print">
+			<div class="u-footer">
+				
+
+<a href="https://github.com/ntoofu/"><img class="icon-social" src="https://ntoofu.github.io/blog/img/github.svg" alt="Github"/></a>
+
+
+<a href="https://twitter.com/ntoofu"><img class="icon-social" src="https://ntoofu.github.io/blog/img/twitter.svg" alt="Twitter"/></a>
+
+<a href="https://ntoofu.github.io/blog/index.xml" target="_blank"><img class="icon-social" src="https://ntoofu.github.io/blog/img/feed.svg" alt="Feed"></a>
+
+				<p>
+					
+					Theme used: <a href="https://github.com/yursan9/manis-hugo-theme">Manis</a><br>
+					
+					
+					&copy; 2018 ntoofu
+					
+					
+				</p>
+				
+				<a href="#brand">
+                    <img class="icon-text" src="https://ntoofu.github.io/blog/img/toup.svg" alt="To Up"/>
+					<span>Back to Up</span>
+				</a>
+				
+			</div>
+		</footer>
+		
+	</body>
+</html>
+
