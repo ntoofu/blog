@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<meta name="generator" content="Hugo 0.53" />
+		<title>Looking Glass (KVM)を「例のグラボ」で試した - ntoofu</title>
+
+		<meta name="description" content="Looking Glass というものを「例のグラボ」で試してみた。
+Looking Glass とは  同名のものが色々ある気がするが, 今試すのは これ  最近よく耳にするのはホログラフィックディスプレイである Looking Glassだが, これの話ではない ネットワーク関連とかだと指定したホストにICMPパケットを投げてくれるサービスをLooking Glassと 言うが, それの話でもない  KVM (Kernel-based Virtual Machine) にグラフィックスカードをPass-throughで見せているときに, そのグラフィックスカードの出力をKVMホスト上で覗き見るソフトウェア  低遅延であることが大きな特長  KVMによる仮想化環境で, 今の所ゲストがWindows10の場合にのみ利用可能  背景  Linuxデスクトップ上にKVMでWindows10をゲスト動作させ, そこでDirectXを利用するようなゲームを行う&hellip; といったユースケースが主に想定される LinuxでWindowsゲームを行う場合, 以下のような選択肢が主に考えられる (Looking Glassはこの2番めの方法)  Proton  Windows APIを変換することでWindowsアプリケーションを Linux等のOSで動かそうとする Wine をforkしている Vulkan APIというクロスプラットフォームな低レイヤーのグラフィックスAPIを利用して, DirectXを実装(DXVK)することで, Linux上でDirectXを処理できるようにしている  Linux上で仮想マシンを動作させ, WindowsをゲストOSとして利用する  DirectXの処理をさせるため, ホスト上のグラフィックスカードをパススルーでゲストOSに見せる  WindowsゲームがDirectXではなくVulkanを用いて作られるようになるのを待つ  Protonについては試していないのでなんともわからないが, 仮想マシンにグラフィックスカードを パススルーする場合, そのグラフィックスカードの画面出力を利用することになる  つまり, KVMホストのLinuxでも画面出力を利用する場合は, Linux用とゲストのWindows用に 2つのディスプレイ（又は1つのディスプレイの2つの画面入力）を消費しないといけない この点を遅延をほとんど生まずに解消できるのがLooking Glassのメリット  但し, 後述の通り実際には画面の接続だけはしたほうがよかったりする    動作原理  パススルーしたグラフィックスカードのフレームバッファ（各種レンダリングの結果とも言える, 実際に画面へ出力するデータを格納している）の中身を, KVMホストから参照してKVMホスト側の GUI環境に描画する  DXGI Desktop Duplicationという, 画面キャプチャに用いるDirectX関連のAPIを使って, フレームをメインメモリ上にコピーするプログラムをゲストWindows上で動作させる ゲストOSにてメインメモリ上に取ってきたフレームは, ivshmem (Inter-VM shared memory) というKVMの機能を使って, KVMホストから参照できるようにする KVMホストのGUI環境でクライアントのソフトウェアを動作させ, ivshmemを参照してフレームを描画する   mermaid.">
+
+		<meta name="google-site-verification" content="-dM2-3-X8FeQrDaA7h-n_6oJ7drfIg3AD4AjEvr6LGw" />
+
+		
+		
+		
+        <link rel="stylesheet" href="https://ntoofu.github.io/blog/css/ui.min.css"/>
+		
+		
+		
+
+		<link  rel="stylesheet" href="https://fonts.googleapis.com/css?family=Fira+Mono|Lato|Raleway">
+
+		
+
+		<style>
+	a { color: #2c6be0; }
+	blockquote {
+		border-left-color: #2c6be0;
+		border-right-color: #2c6be0; }
+	.bar a:hover {
+		color: #2c6be0;
+		text-decoration: none; }
+	.sep {
+		margin-top: 2rem;
+		margin-bottom: 1rem;
+		margin-left:0;
+		width: 24rem;
+		border-top: 2px solid #2c6be0; }
+</style>
+
+	</head>
+
+<body>
+<header class="container no-print">
+	<div class="u-header">
+		<nav class="bar">
+	<ul><li>
+			<a href="https://ntoofu.github.io/blog/">
+                <img class="icon-text" src="https://ntoofu.github.io/blog/img/prev.svg"/>
+			</a>
+		</li><li><a href="https://ntoofu.github.io/blog/about/">About</a></li><li><a href="https://ntoofu.github.io/blog/post/">Posts</a></li><li><a href="https://ntoofu.github.io/blog/work/">Works</a></li></ul>
+</nav>
+
+	</div>
+</header>
+<main class="container">
+
+<article>
+	<header><hgroup id="brand">
+	<h1>Looking Glass (KVM)を「例のグラボ」で試した</h1>
+	<h5>
+		
+		<time datetime="2019-02-11 00:00:00 &#43;0000 UTC">2019-02-11</time>
+		<span class="no-print">
+			<span>
+	</h5>
+	
+</hgroup>
+<hr class="sep" />
+</header>
+	
+
+<p><a href="https://looking-glass.hostfission.com/">Looking Glass</a> というものを「例のグラボ」で試してみた。</p>
+
+<h2 id="looking-glass-とは">Looking Glass とは</h2>
+
+<ul>
+<li>同名のものが色々ある気がするが, 今試すのは <a href="https://looking-glass.hostfission.com/">これ</a>
+
+<ul>
+<li>最近よく耳にするのはホログラフィックディスプレイである
+<a href="https://lookingglassfactory.com/">Looking Glass</a>だが, これの話ではない</li>
+<li>ネットワーク関連とかだと指定したホストにICMPパケットを投げてくれるサービスをLooking Glassと
+言うが, それの話でもない</li>
+</ul></li>
+<li>KVM (Kernel-based Virtual Machine) にグラフィックスカードをPass-throughで見せているときに,
+そのグラフィックスカードの出力をKVMホスト上で覗き見るソフトウェア
+
+<ul>
+<li>低遅延であることが大きな特長</li>
+</ul></li>
+<li>KVMによる仮想化環境で, 今の所ゲストがWindows10の場合にのみ利用可能</li>
+</ul>
+
+<h3 id="背景">背景</h3>
+
+<ul>
+<li>Linuxデスクトップ上にKVMでWindows10をゲスト動作させ, そこでDirectXを利用するようなゲームを行う&hellip;
+といったユースケースが主に想定される</li>
+<li>LinuxでWindowsゲームを行う場合, 以下のような選択肢が主に考えられる (Looking Glassはこの2番めの方法)
+
+<ul>
+<li><a href="https://github.com/ValveSoftware/Proton">Proton</a>
+
+<ul>
+<li>Windows APIを変換することでWindowsアプリケーションを
+Linux等のOSで動かそうとする <a href="https://www.winehq.org/">Wine</a> をforkしている</li>
+<li>Vulkan APIというクロスプラットフォームな低レイヤーのグラフィックスAPIを利用して,
+DirectXを実装(<a href="https://github.com/doitsujin/dxvk">DXVK</a>)することで,
+Linux上でDirectXを処理できるようにしている</li>
+</ul></li>
+<li>Linux上で仮想マシンを動作させ, WindowsをゲストOSとして利用する
+
+<ul>
+<li>DirectXの処理をさせるため, ホスト上のグラフィックスカードをパススルーでゲストOSに見せる</li>
+</ul></li>
+<li><del>WindowsゲームがDirectXではなくVulkanを用いて作られるようになるのを待つ</del></li>
+</ul></li>
+<li>Protonについては試していないのでなんともわからないが, 仮想マシンにグラフィックスカードを
+パススルーする場合, そのグラフィックスカードの画面出力を利用することになる
+
+<ul>
+<li>つまり, KVMホストのLinuxでも画面出力を利用する場合は, Linux用とゲストのWindows用に
+2つのディスプレイ（又は1つのディスプレイの2つの画面入力）を消費しないといけない</li>
+<li><strong>この点を遅延をほとんど生まずに解消できるのがLooking Glassのメリット</strong>
+
+<ul>
+<li>但し, 後述の通り実際には画面の接続だけはしたほうがよかったりする</li>
+</ul></li>
+</ul></li>
+</ul>
+
+<h3 id="動作原理">動作原理</h3>
+
+<ul>
+<li>パススルーしたグラフィックスカードのフレームバッファ（各種レンダリングの結果とも言える,
+実際に画面へ出力するデータを格納している）の中身を, KVMホストから参照してKVMホスト側の
+GUI環境に描画する
+
+<ul>
+<li>DXGI Desktop Duplicationという, 画面キャプチャに用いるDirectX関連のAPIを使って,
+フレームをメインメモリ上にコピーするプログラムをゲストWindows上で動作させる</li>
+<li>ゲストOSにてメインメモリ上に取ってきたフレームは,
+ivshmem (Inter-VM shared memory) というKVMの機能を使って, KVMホストから参照できるようにする</li>
+<li>KVMホストのGUI環境でクライアントのソフトウェアを動作させ, ivshmemを参照してフレームを描画する</li>
+</ul></li>
+</ul>
+
+<link href="https://ntoofu.github.io/blog/mermaid/mermaid.css" type="text/css" rel="stylesheet"/>
+<script defer src="https://unpkg.com/mermaid@7.1.2/dist/mermaid.js">mermaid.initialize({startOnLoad:true});</script>
+<div class="mermaid" align="left" >
+graph LR
+  subgraph KVM_host
+    subgraph guest_Windows
+      agent(("Agent Software<br/>(looking-glass-host)"))
+      game(("DirectX Application<br/>(such as games)"))
+      subgraph passthrough_vga
+        fb2(frame buffer)
+      end
+    end
+    subgraph host_vga
+      fb1(frame buffer)
+    end
+    client(("Client Software<br/>(looking-glass-client)"))
+    ivshmem(ivshmem)
+  end
+  monitor1[Monitor]
+  monitor2[Monitor]
+
+  agent -- "DXGI Desktop Duplication API" --> fb2
+  fb2 ==> agent
+  game == render ==> fb2
+  agent ==> ivshmem
+  client ==> fb1
+  client --> ivshmem
+  ivshmem ==> client
+  fb1 == output ==> monitor1
+  fb2 -. output .-> monitor2
+</div>
+
+
+<h2 id="例のグラボ-とは">例のグラボ とは</h2>
+
+<p>事の顛末はちゃんと把握していないが, マイニング向けとして画面出力端子のないグラフィックスカードの
+中古品が, 2018年末から2019年始にかけて非常に安価で大量に出回っている。
+これが実は <a href="https://media.dmm-make.com/item/4515/">この記事</a>のように, 画面出力端子を
+復活させられるということもあって一部界隈で盛り上がっている。</p>
+
+<h3 id="自分の場合">自分の場合</h3>
+
+<p>ノリで1枚購入した。大きくわけて改造には</p>
+
+<ol>
+<li>HDMI端子の解放（ブラケットの加工）</li>
+<li>HDMI画面出力の解放（チップコンデンサのはんだ付け）</li>
+<li>2番目以降の画面出力の解放（ブラケットの加工, 端子の実装, 回路素子の実装）</li>
+</ol>
+
+<p>とステップがあり, この2番目には1005サイズのチップコンデンサ等が必要で, その調達に
+時間がかかっているので1番目の加工のみで組み込み, Looking Glassを使うことにした。</p>
+
+<p>Looking Glassを使う場合, パススルーに使うグラフィックスカードの画面出力そのものは必要なく,
+画面出力をするために「グラフィックスカードに画面が接続されている」ことを認識さえすればよい。</p>
+
+<p>これはまさに「例のグラボ」改造の1段階目を経た状態でモニタを接続だけすれば実現される状態に
+他ならない。（詳しくは知らないが, どうやら2段階目を経ないと画面出力そのものはなされないが,
+回路に手を加えずとも画面の接続の検出などはできるらしく, 1段階目までで条件はクリアされる。）</p>
+
+<p>ちなみに, ブラケット加工はハンドニブラがあれば簡単だった。</p>
+
+<p><img src="https://pbs.twimg.com/media/DxMxO-wU0AIKiZb.jpg:large" alt="" /></p>
+
+<h2 id="手順">手順</h2>
+
+<p><a href="https://looking-glass.hostfission.com/quickstart">Quickstart Guide</a> に従うのみではあるが,
+流れと注意点のみ説明する。</p>
+
+<h3 id="windows-ゲストでの作業">Windows ゲストでの作業</h3>
+
+<ul>
+<li>ivshmemを利用するためのドライバをインストールする</li>
+<li>動作に必要となるゲスト上で動作させるソフトウェア <code>looking-glass-host.exe</code> をインストール
+
+<ul>
+<li>バイナリをダウンロードして適当に配置するだけ</li>
+<li>利用形態次第だが, OS起動時に自動起動するようにしたほうが便利なため, レジストリをいじって設定</li>
+</ul></li>
+</ul>
+
+<h3 id="kvm-ホスト-linux-での作業">KVM ホスト(Linux)での作業</h3>
+
+<ul>
+<li>クライアントである <code>looking-glass-client</code> をビルドする
+
+<ul>
+<li>Quickstart GuideはDebian前提でパッケージを書いているが,
+他のdistroでも（少なくともGentoo Linuxでは）対応するものをインストールすればビルドはできる</li>
+</ul></li>
+<li>VMにivshmemの設定をする
+
+<ul>
+<li>libvirtを利用していたので, <code>virsh edit</code> コマンドを使ってXMLを編集</li>
+</ul></li>
+<li>ivshmemの設定
+
+<ul>
+<li><code>/dev/shm</code> 以下にファイルを作成してパーミッション等を設定するだけ</li>
+</ul></li>
+</ul>
+
+<h3 id="注意点">注意点</h3>
+
+<ul>
+<li>軽く触れている通り, パススルーするグラフィックスカードは画面が接続されている認識がないと
+上手く行かない可能性が高いため, 実際に使わなくともモニタを接続したほうが良い
+
+<ul>
+<li>ダミーのドングルがあればそれでも良いはずだが, 試してはいない</li>
+</ul></li>
+<li>Windowsは仮想のグラフィックスカード(QXL等)とパススルーしたグラフィックスカードを認識することに
+なるが, 自分の環境では後者に対応する画面をプライマリにしないと <code>looking-glass-host</code> が上手く
+動作しなかった</li>
+<li><code>looking-glass-client</code> がSpiceクライアントの機能も持っているため,
+キーボード操作は <code>looking-glass-client</code> 上で自然に行える
+
+<ul>
+<li>ただし, マウスに関しては現時点で動作が不安定であり,
+FAQにあるようにパススルーしてしまったほうが賢明</li>
+<li>音声に関しては <code>looking-glass-client</code> では実装していないので,
+<code>virt-manager</code> 等の音声転送にも対応した Spiceクライアントを併用するのも手
+(但し, <code>looking-glass-client</code> より先に接続しておかないとうまくいかない)</li>
+</ul></li>
+</ul>
+
+<h2 id="所感">所感</h2>
+
+<ul>
+<li>低遅延を謳うだけあり, 遅延は気にならなかった。(コアなゲーマーでは無いからかもしれない)</li>
+<li>ivshmem というのを初めて知った, 面白そう</li>
+</ul>
+
+</article>
+<nav class="no-print post-nav">
+
+	<a class="prev-post" href="https://ntoofu.github.io/blog/post/try-multus-cni/">
+        <img class="icon-text" src="https://ntoofu.github.io/blog/img/prev.svg"/>Multus CNI pluginをKubernetesで試した</a>
+
+
+</nav>
+
+
+
+
+			<hr class="sep" />
+		</main>
+		<footer class="container no-print">
+			<div class="u-footer">
+				
+
+<a href="https://github.com/ntoofu/"><img class="icon-social" src="https://ntoofu.github.io/blog/img/github.svg" alt="Github"/></a>
+
+
+<a href="https://twitter.com/ntoofu"><img class="icon-social" src="https://ntoofu.github.io/blog/img/twitter.svg" alt="Twitter"/></a>
+
+<a href="https://ntoofu.github.io/blog/index.xml" target="_blank"><img class="icon-social" src="https://ntoofu.github.io/blog/img/feed.svg" alt="Feed"></a>
+
+				<p>
+					
+					Theme used: <a href="https://github.com/yursan9/manis-hugo-theme">Manis</a><br>
+					
+					
+					&copy; 2018 ntoofu
+					
+					
+				</p>
+				
+				<a href="#brand">
+                    <img class="icon-text" src="https://ntoofu.github.io/blog/img/toup.svg" alt="To Up"/>
+					<span>Back to Up</span>
+				</a>
+				
+			</div>
+		</footer>
+		
+	</body>
+</html>
+

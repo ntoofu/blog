@@ -6,10 +6,20 @@
     <description>Recent content on ntoofu</description>
     <generator>Hugo -- gohugo.io</generator>
     <copyright>&amp;copy; 2018 ntoofu</copyright>
-    <lastBuildDate>Sun, 10 Feb 2019 00:00:00 +0000</lastBuildDate>
+    <lastBuildDate>Mon, 11 Feb 2019 00:00:00 +0000</lastBuildDate>
     
 	<atom:link href="https://ntoofu.github.io/blog/index.xml" rel="self" type="application/rss+xml" />
     
+    
+    <item>
+      <title>Looking Glass (KVM)を「例のグラボ」で試した</title>
+      <link>https://ntoofu.github.io/blog/post/try-looking-glass-kvm/</link>
+      <pubDate>Mon, 11 Feb 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://ntoofu.github.io/blog/post/try-looking-glass-kvm/</guid>
+      <description>Looking Glass というものを「例のグラボ」で試してみた。
+Looking Glass とは  同名のものが色々ある気がするが, 今試すのは これ  最近よく耳にするのはホログラフィックディスプレイである Looking Glassだが, これの話ではない ネットワーク関連とかだと指定したホストにICMPパケットを投げてくれるサービスをLooking Glassと 言うが, それの話でもない  KVM (Kernel-based Virtual Machine) にグラフィックスカードをPass-throughで見せているときに, そのグラフィックスカードの出力をKVMホスト上で覗き見るソフトウェア  低遅延であることが大きな特長  KVMによる仮想化環境で, 今の所ゲストがWindows10の場合にのみ利用可能  背景  Linuxデスクトップ上にKVMでWindows10をゲスト動作させ, そこでDirectXを利用するようなゲームを行う&amp;hellip; といったユースケースが主に想定される LinuxでWindowsゲームを行う場合, 以下のような選択肢が主に考えられる (Looking Glassはこの2番めの方法)  Proton  Windows APIを変換することでWindowsアプリケーションを Linux等のOSで動かそうとする Wine をforkしている Vulkan APIというクロスプラットフォームな低レイヤーのグラフィックスAPIを利用して, DirectXを実装(DXVK)することで, Linux上でDirectXを処理できるようにしている  Linux上で仮想マシンを動作させ, WindowsをゲストOSとして利用する  DirectXの処理をさせるため, ホスト上のグラフィックスカードをパススルーでゲストOSに見せる  WindowsゲームがDirectXではなくVulkanを用いて作られるようになるのを待つ  Protonについては試していないのでなんともわからないが, 仮想マシンにグラフィックスカードを パススルーする場合, そのグラフィックスカードの画面出力を利用することになる  つまり, KVMホストのLinuxでも画面出力を利用する場合は, Linux用とゲストのWindows用に 2つのディスプレイ（又は1つのディスプレイの2つの画面入力）を消費しないといけない この点を遅延をほとんど生まずに解消できるのがLooking Glassのメリット  但し, 後述の通り実際には画面の接続だけはしたほうがよかったりする    動作原理  パススルーしたグラフィックスカードのフレームバッファ（各種レンダリングの結果とも言える, 実際に画面へ出力するデータを格納している）の中身を, KVMホストから参照してKVMホスト側の GUI環境に描画する  DXGI Desktop Duplicationという, 画面キャプチャに用いるDirectX関連のAPIを使って, フレームをメインメモリ上にコピーするプログラムをゲストWindows上で動作させる ゲストOSにてメインメモリ上に取ってきたフレームは, ivshmem (Inter-VM shared memory) というKVMの機能を使って, KVMホストから参照できるようにする KVMホストのGUI環境でクライアントのソフトウェアを動作させ, ivshmemを参照してフレームを描画する   mermaid.</description>
+    </item>
     
     <item>
       <title>Multus CNI pluginをKubernetesで試した</title>
