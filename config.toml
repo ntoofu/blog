@@ -73,6 +73,8 @@ pygmentsUseClasses = true
 	github = "https://github.com/ntoofu/"
 	twitter = "https://twitter.com/ntoofu"
 
+	GoogleSiteVerification = "-dM2-3-X8FeQrDaA7h-n_6oJ7drfIg3AD4AjEvr6LGw"
+
 [frontmatter]
 	date = [":filename", "date", ":default"]
 	lastmod = ["lastmod", ":git", ":fileModTime", ":default"]
