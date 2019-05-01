@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<meta name="generator" content="Hugo 0.53" />
+		<title>IPVS (LVS/NAT) とiptables DNAT targetの共存について調べた - ntoofu</title>
+
+		<meta name="description" content="TL;DR  IPVSはデフォルトでconntrack(標準のconnection tracking)を利用しない そのせいでIPVSに処理させるパケットをNATしたりすると期待通り動かないことがある 必要があれば /proc/sys/net/ipv4/vs/conntrack (net.ipv4.vs.conntrack) を設定しよう  背景  iptablesの DNAT targetと IPVS(LVS/NAT構成)を共存させると上手く行かない  PREROUTING chainにおいて REDIRECT target によりポート番号をIPVSのvirtual serviceのものに変換するように設定した場合, REDIRECTされるポートに対し接続すると, 戻り通信(SYNに対するSYN&#43;ACK)の送信元ポートがvirtual serviceのものになる（期待されるのは, 変換前のもの) (PREROUTING chainの) REDIRECT targetは内部的には DNAT と同等の動きをするようで, DNAT でも起きる  以下のようにすれば再現する
+ テスト用ホストでnetcatなどで適当にListenしてくれるポートを2つ作り, IPVSでバランシング設定
+(while true;do nc -l -p 1001; echo 1001; done)&amp; (while true;do nc -l -p 1002; echo 1002; done)&amp;  ipvsadm -A -t 172.16.1.8:1000 -s rr ipvsadm -a -t 172.16.1.8:1000 -r 172.">
+
+		<meta name="google-site-verification" content="-dM2-3-X8FeQrDaA7h-n_6oJ7drfIg3AD4AjEvr6LGw" />
+
+		
+		
+		
+        <link rel="stylesheet" href="https://ntoofu.github.io/blog/css/ui.min.css"/>
+		
+		
+		
+
+		<link  rel="stylesheet" href="https://fonts.googleapis.com/css?family=Fira+Mono|Lato|Raleway">
+
+		
+
+		<style>
+	a { color: #2c6be0; }
+	blockquote {
+		border-left-color: #2c6be0;
+		border-right-color: #2c6be0; }
+	.bar a:hover {
+		color: #2c6be0;
+		text-decoration: none; }
+	.sep {
+		margin-top: 2rem;
+		margin-bottom: 1rem;
+		margin-left:0;
+		width: 24rem;
+		border-top: 2px solid #2c6be0; }
+</style>
+
+	</head>
+
+<body>
+<header class="container no-print">
+	<div class="u-header">
+		<nav class="bar">
+	<ul><li>
+			<a href="https://ntoofu.github.io/blog/">
+                <img class="icon-text" src="https://ntoofu.github.io/blog/img/prev.svg"/>
+			</a>
+		</li><li><a href="https://ntoofu.github.io/blog/about/">About</a></li><li><a href="https://ntoofu.github.io/blog/post/">Posts</a></li><li><a href="https://ntoofu.github.io/blog/work/">Works</a></li></ul>
+</nav>
+
+	</div>
+</header>
+<main class="container">
+
+<article>
+	<header><hgroup id="brand">
+	<h1>IPVS (LVS/NAT) とiptables DNAT targetの共存について調べた</h1>
+	<h5>
+		
+		<time datetime="2019-05-02 00:00:00 &#43;0000 UTC">2019-05-02</time>
+		<span class="no-print">
+			<span>
+	</h5>
+	
+</hgroup>
+<hr class="sep" />
+</header>
+	
+
+<h1 id="tl-dr">TL;DR</h1>
+
+<ul>
+<li>IPVSはデフォルトで<code>conntrack</code>(標準のconnection tracking)を利用しない</li>
+<li>そのせいでIPVSに処理させるパケットをNATしたりすると期待通り動かないことがある</li>
+<li>必要があれば <code>/proc/sys/net/ipv4/vs/conntrack</code> (<code>net.ipv4.vs.conntrack</code>) を設定しよう</li>
+</ul>
+
+<h1 id="背景">背景</h1>
+
+<ul>
+<li>iptablesの <code>DNAT</code> targetと IPVS(LVS/NAT構成)を共存させると上手く行かない
+
+<ul>
+<li>PREROUTING chainにおいて <code>REDIRECT</code> target によりポート番号をIPVSのvirtual serviceのものに変換するように設定した場合, REDIRECTされるポートに対し接続すると, 戻り通信(SYNに対するSYN+ACK)の送信元ポートがvirtual serviceのものになる（期待されるのは, 変換前のもの)</li>
+<li>(PREROUTING chainの) <code>REDIRECT</code> targetは内部的には <code>DNAT</code> と同等の動きをするようで, <code>DNAT</code> でも起きる</li>
+</ul></li>
+
+<li><p>以下のようにすれば再現する</p>
+
+<ul>
+<li><p>テスト用ホストでnetcatなどで適当にListenしてくれるポートを2つ作り, IPVSでバランシング設定</p>
+
+<pre><code>(while true;do nc -l -p 1001; echo 1001; done)&amp;
+(while true;do nc -l -p 1002; echo 1002; done)&amp;
+</code></pre>
+
+<pre><code>ipvsadm -A -t 172.16.1.8:1000 -s rr
+ipvsadm -a -t 172.16.1.8:1000 -r 172.16.1.8:1001 -m
+ipvsadm -a -t 172.16.1.8:1000 -r 172.16.1.8:1002 -m
+</code></pre></li>
+
+<li><p>別ホストから接続を確認 (期待通り2つのnetcatプロセスに分散されて動いている)</p>
+
+<pre><code>echo hoge | nc -N 172.16.1.8 1000
+echo hoge | nc -N 172.16.1.8 1000
+</code></pre>
+
+<ul>
+<li><p>テストホストでの出力</p>
+
+<pre><code>hoge
+1001
+hoge
+1002
+</code></pre></li>
+</ul></li>
+
+<li><p>テスト用ホストでREDIRECTターゲットを設定</p>
+
+<pre><code>iptables -t nat -A PREROUTING -p tcp --dport 1010 -j REDIRECT --to-port 1000
+</code></pre></li>
+
+<li><p>別ホストから接続を確認 (<strong>接続できず, tcpdumpで見ると戻りパケットの送信元ポート番号がおかしい</strong>)</p>
+
+<pre><code>echo hoge | nc -N 172.16.1.8 1000
+</code></pre>
+
+<pre><code>23:01:43.223963 IP 172.16.1.2.54996 &gt; 172.16.1.8.1010: Flags [S], seq 3333715063, win 29200, options [mss 1460,sackOK,TS val 535608746 ecr 0,nop,wscale 7], length 0
+23:01:43.224307 IP 172.16.1.8.1000 &gt; 172.16.1.2.54996: Flags [S.], seq 3354407097, ack 3333715064, win 28960, options [mss 1460,sackOK,TS val 128663562 ecr 535608746,nop,wscale 7], length 0
+23:01:43.224330 IP 172.16.1.2.54996 &gt; 172.16.1.8.1000: Flags [R], seq 3333715064, win 0, length 0
+</code></pre></li>
+
+<li><p>テスト用ホストでDNATターゲットを設定しても, 同様</p>
+
+<pre><code>iptables -t nat -A PREROUTING -p tcp --dport 1020 -j DNAT --to-destination :1000
+</code></pre></li>
+
+<li><p>( Linux kernel 4.14.83 で確認 )</p></li>
+</ul></li>
+</ul>
+
+<h1 id="調べたこと">調べたこと</h1>
+
+<p>netfilterの動きについて, ソースコードを中心に確認し, 前述の事象が起きる理由を調査した。</p>
+
+<h2 id="前提知識">前提知識</h2>
+
+<ul>
+<li>iptablesの操作やtable, chain, targetなどの概念は知っている前提</li>
+<li>仕組みの概要は <a href="https://www.digitalocean.com/community/tutorials/a-deep-dive-into-iptables-and-netfilter-architecture">A Deep Dive into Iptables and Netfilter Architecture</a> がiptablesとnetfilterの関係を含め説明している
+
+<ul>
+<li>Linux kernelのネットワーク処理の中のhookを提供する枠組み(=netfilter)を利用したfirewall softwareがiptables</li>
+<li>netfilterの用意するhookは何種類かあり, それに対応するのがiptablesのchain(の中の初期から存在するもの)</li>
+<li>chainに紐づくtableは複数存在しうるが, 所定の順で呼び出される</li>
+</ul></li>
+<li>IPVS も netfilter を利用して作られている</li>
+</ul>
+
+<h2 id="ソースコードリーディング">ソースコードリーディング</h2>
+
+<ul>
+<li>取っ掛かりとして REDIRECT target について調べる
+
+<ul>
+<li><a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/xt_REDIRECT.c"><code>/net/netfilter/xt_REDIRECT.c</code></a> が実装で,
+ぱっと見 <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/xt_REDIRECT.c#L74"><code>redirect_tg_reg</code></a> で target の定義をしている
+
+<ul>
+<li><code>redirect_tg_init</code> がmodule初期化時(多分)に呼び出され, <code>xt_register_target</code> を介して <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/x_tables.c#L56">AddressFamilyごとのtargetのリスト</a> に追加されていく</li>
+</ul></li>
+</ul></li>
+<li>targetを呼び出す箇所が気になるので, パケットに対し各ルールを評価する場所を探す
+
+<ul>
+<li><strong><a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/ipv4/netfilter/ip_tables.c#L227"><code>ipt_do_table</code></a> がそれ</strong>
+
+<ul>
+<li>packet(<code>skb</code>) に対し, 現在評価対象のhookに関するtable内のルール(<code>ipt_entry</code>がルールを表現)を順番にチェックしている様子</li>
+<li><a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/ipv4/netfilter/ip_tables.c#L291">ここ</a>で match (プロトコルを解釈した上でのマッチ条件) によらないIPヘッダだけでのマッチ</li>
+<li><a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/ipv4/netfilter/ip_tables.c#L298">ここ</a>で match ごとの評価</li>
+<li><a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/ipv4/netfilter/ip_tables.c#L308">ここ</a>からtargetの実行</li>
+</ul></li>
+<li><code>ipt_do_table</code> は最終的には <a href="https://elixir.bootlin.com/linux/v4.14.83/source/include/linux/netfilter.h#L64"><code>nf_hook_ops</code>構造体</a> としてhookに登録される
+
+<ul>
+<li><code>ipt_do_table</code> は <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/ipv4/netfilter/iptable_filter.c#L47"><code>iptable_filter_hook</code> などに呼び出され</a>ている</li>
+<li><code>iptable_filter_hook</code> などは <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/ipv4/netfilter/iptable_filter.c#L102">ここ</a> のように
+初期化時に <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/x_tables.c#L1614"><code>xt_hook_ops_alloc</code></a> により
+<a href="https://elixir.bootlin.com/linux/v4.14.83/source/include/linux/netfilter.h#L64"><code>nf_hook_ops</code>構造体</a> に詰められ
+<a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/ipv4/netfilter/iptable_filter.c#L71"><code>ipt_register_table</code> によって登録される</a></li>
+<li><a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/ipv4/netfilter/ip_tables.c#L1787"><code>ipt_regsiter_table</code></a>
+-&gt; <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/core.c#L382"><code>nf_register_net_hooks</code></a>
+-&gt; <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/core.c#L277"><code>nf_register_net_hook</code></a>
+とたどり, <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/core.c#L101"><code>nf_hook_entries_grow</code></a> でhook関数のリストに追加される</li>
+<li>登録時には<a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/core.c#L138">priorityを見て</a>hook関数の順序を決定しており,
+元は <code>xt_table</code> として設定された <code>.priority</code> が <code>nf_hook_ops</code> の <code>.priority</code> に引き継がれている <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/x_tables.c#L1635"><code>xt_proto_init</code></a>
+
+<ul>
+<li>大元になる priority は <a href="https://elixir.bootlin.com/linux/v4.14.83/source/include/uapi/linux/netfilter_ipv4.h#L58">このへん</a> であり,
+<a href="https://www.digitalocean.com/community/tutorials/a-deep-dive-into-iptables-and-netfilter-architecture">A Deep Dive into Iptables and Netfilter Architecture</a> の表に合致する</li>
+</ul></li>
+</ul></li>
+</ul></li>
+<li>IPVSについては, <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/ipvs/ip_vs_core.c">ここ</a>を中心に実装がある
+
+<ul>
+<li>受け付ける通信は<a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/ipvs/ip_vs_core.c#L2126">SNATより1つ高い優先度</a>で,
+戻りの通信は<a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/ipvs/ip_vs_core.c#L2133">DNATより1つ低い優先度</a>で処理される</li>
+</ul></li>
+<li>気になっている事象は, 戻りの通信自体はあるがsource portがおかしく, 戻り通信の処理がおかしいように感じる</li>
+<li><code>DNAT</code> や <code>REDIRECT</code> については PREROUTING chain にしかルールを書かなくても通常は戻りの通信も上手く行くが, これは<code>conntrack</code>によるconnection trackingのおかげ
+
+<ul>
+<li><code>conntrack</code> も <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/ipv4/netfilter/nf_conntrack_l3proto_ipv4.c#L181">netfilterを用いて実装されている</a></li>
+<li><code>conntrack</code> の情報は <a href="https://elixir.bootlin.com/linux/v4.14.83/source/include/linux/skbuff.h#L701">skbに紐づけて管理される</a></li>
+</ul></li>
+</ul>
+
+<h2 id="仮説-conntrack-と-ipvs-の評価順序の問題">仮説: conntrack と IPVS の評価順序の問題</h2>
+
+<ul>
+<li>仮説: 評価順序からすると, ingress traffic も egress traffic も <code>conntrack</code> -&gt; IPVS の順序であり,
+IPVSによるpacket書き換えの影響で egress traffic の connection tracking がマッチしないのではないか</li>
+<li>IPVSによるoutput通信の書き換えの優先度を上げて実験
+
+<ul>
+<li><a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/ipvs/ip_vs_core.c#L2133">ここ</a>について,
+<code>NF_IP_PRI_CONNTRACK - 1</code> としてkernelをビルドし直す</li>
+</ul></li>
+<li>結果: 変化なし
+
+<ul>
+<li>事象は全く変わりなく発生した</li>
+<li><code>conntrack -E</code> コマンドで <code>conntrack</code> について確認してみると,
+そもそも IPVSのvirtual serviceへの通信は <code>conntrack</code> 情報が乗ってこない事がわかる</li>
+</ul></li>
+</ul>
+
+<h2 id="さらに調査">さらに調査</h2>
+
+<ul>
+<li>そもそも <strong>IPVSは独自にconnection trackingを実装していて, 標準の<code>conntrack</code>を利用しない</strong>
+
+<ul>
+<li><a href="http://kb.linuxvirtualserver.org/wiki/Performance_and_Tuning#Netfilter_Connection_Track">ここ</a>などで触れられている</li>
+<li><strong><code>conntrack</code>の情報は削除している</strong>
+
+<ul>
+<li><a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/ipvs/ip_vs_conn.c#L514">ここ</a> で設定された <code>ip_vs_nat_xmit</code> が
+<a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/ipvs/ip_vs_core.c#L1983">ここ</a> で呼び出され,
+<a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/ipvs/ip_vs_xmit.c#L810"><code>ip_vs_nat_send_or_cont</code> を経由</a>して
+<code>IP_VS_CONN_F_NFCT</code> フラグが立っていなければ <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/ipvs/ip_vs_xmit.c#L615"><code>ip_vs_notrack</code></a> により
+<code>conntrack</code> の情報を削除される</li>
+</ul></li>
+</ul></li>
+<li>先に触れていたように, <strong><code>conntrack</code> の情報は <code>skb</code> に紐付けられており</strong>, <code>DNAT</code> <code>REDIRECT</code> がどう動いていても
+情報が消されてしまっては戻りの通信を正しく処理できるはずがない
+
+<ul>
+<li>IPVS独自実装のconnection trackingだけが働くため, IPVSのvirtual serviceのportが送信元になる</li>
+</ul></li>
+<li>しかし, よく見ると <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/ipvs/ip_vs_conn.c#L989">ここ</a> が
+真であれば <code>IP_VS_CONN_F_NFCT</code>フラグが立ち, <code>conntrack</code>の情報削除を免れる
+
+<ul>
+<li>直前のコメント文にある, &ldquo;<code>conntrack</code> を保持することが有用なケース&rdquo; がまさに今回のはず</li>
+<li><code>ip_vs_conntrack_enabled</code>が真になるのはたどっていくとsysctlで <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/ipvs/ip_vs_ctl.c#L3978"><code>net/ipv4/vs</code>配下</a> の <a href="https://elixir.bootlin.com/linux/v4.14.83/source/net/netfilter/ipvs/ip_vs_ctl.c#L1752"><code>conntrack</code></a></li>
+</ul></li>
+</ul>
+
+<h2 id="再実験">再実験</h2>
+
+<ul>
+<li><p>テストホストで見つけた設定を試す</p>
+
+<pre><code>sysctl net.ipv4.vs.conntrack=1
+</code></pre></li>
+
+<li><p>別のホストから <code>REDIRECT</code> tagetが働くようにアクセス</p>
+
+<pre><code>echo hoge | nc -N 172.16.1.8 1000
+echo hoge | nc -N 172.16.1.8 1000
+</code></pre>
+
+<ul>
+<li><p>テストホストでの出力</p>
+
+<pre><code>hoge
+1001
+hoge
+1002
+</code></pre></li>
+</ul></li>
+</ul>
+
+<p>無事解決。副作用が無いかについてはまだ調べられていない。</p>
+
+</article>
+<nav class="no-print post-nav">
+
+	<a class="prev-post" href="https://ntoofu.github.io/blog/post/try-looking-glass-kvm/">
+        <img class="icon-text" src="https://ntoofu.github.io/blog/img/prev.svg"/>Looking Glass (KVM)を「例のグラボ」で試した</a>
+
+
+</nav>
+
+
+
+
+			<hr class="sep" />
+		</main>
+		<footer class="container no-print">
+			<div class="u-footer">
+				
+
+<a href="https://github.com/ntoofu/"><img class="icon-social" src="https://ntoofu.github.io/blog/img/github.svg" alt="Github"/></a>
+
+
+<a href="https://twitter.com/ntoofu"><img class="icon-social" src="https://ntoofu.github.io/blog/img/twitter.svg" alt="Twitter"/></a>
+
+<a href="https://ntoofu.github.io/blog/index.xml" target="_blank"><img class="icon-social" src="https://ntoofu.github.io/blog/img/feed.svg" alt="Feed"></a>
+
+				<p>
+					
+					Theme used: <a href="https://github.com/yursan9/manis-hugo-theme">Manis</a><br>
+					
+					
+					&copy; 2018 ntoofu
+					
+					
+				</p>
+				
+				<a href="#brand">
+                    <img class="icon-text" src="https://ntoofu.github.io/blog/img/toup.svg" alt="To Up"/>
+					<span>Back to Up</span>
+				</a>
+				
+			</div>
+		</footer>
+		
+	</body>
+</html>
+

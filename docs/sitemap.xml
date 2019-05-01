@@ -3,8 +3,13 @@
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   
   <url>
+    <loc>https://ntoofu.github.io/blog/post/research-ipvs-and-dnat/</loc>
+    <lastmod>2019-05-02T08:55:35+09:00</lastmod>
+  </url>
+  
+  <url>
     <loc>https://ntoofu.github.io/blog/post/try-looking-glass-kvm/</loc>
-    <lastmod>2019-02-11T05:06:46+09:00</lastmod>
+    <lastmod>2019-02-11T05:12:50+09:00</lastmod>
   </url>
   
   <url>
@@ -62,7 +67,7 @@
   
   <url>
     <loc>https://ntoofu.github.io/blog/</loc>
-    <lastmod>2019-02-11T05:06:46+09:00</lastmod>
+    <lastmod>2019-05-02T08:55:35+09:00</lastmod>
     <priority>0</priority>
   </url>
   
