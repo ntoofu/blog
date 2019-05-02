@@ -12,6 +12,17 @@
     
     
     <item>
+      <title>IPVS (LVS/NAT) とiptables DNAT targetの共存について調べた</title>
+      <link>https://ntoofu.github.io/blog/post/research-ipvs-and-dnat/</link>
+      <pubDate>Thu, 02 May 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://ntoofu.github.io/blog/post/research-ipvs-and-dnat/</guid>
+      <description>TL;DR  IPVSはデフォルトでconntrack(標準のconnection tracking)を利用しない そのせいでIPVSに処理させるパケットをNATしたりすると期待通り動かないことがある 必要があれば /proc/sys/net/ipv4/vs/conntrack (net.ipv4.vs.conntrack) を設定しよう  背景  iptablesの DNAT targetと IPVS(LVS/NAT構成)を共存させると上手く行かない  PREROUTING chainにおいて REDIRECT target によりポート番号をIPVSのvirtual serviceのものに変換するように設定した場合, REDIRECTされるポートに対し接続すると, 戻り通信(SYNに対するSYN+ACK)の送信元ポートがvirtual serviceのものになる（期待されるのは, 変換前のもの) (PREROUTING chainの) REDIRECT targetは内部的には DNAT と同等の動きをするようで, DNAT でも起きる  以下のようにすれば再現する
+ テスト用ホストでnetcatなどで適当にListenしてくれるポートを2つ作り, IPVSでバランシング設定
+(while true;do nc -l -p 1001; echo 1001; done)&amp;amp; (while true;do nc -l -p 1002; echo 1002; done)&amp;amp;  ipvsadm -A -t 172.16.1.8:1000 -s rr ipvsadm -a -t 172.16.1.8:1000 -r 172.</description>
+    </item>
+    
+    <item>
       <title>Looking Glass (KVM)を「例のグラボ」で試した</title>
       <link>https://ntoofu.github.io/blog/post/try-looking-glass-kvm/</link>
       <pubDate>Mon, 11 Feb 2019 00:00:00 +0000</pubDate>
