@@ -36,16 +36,6 @@ bridge CNI plugin 標準的なCNIプラグインとして https://github.com/con
     </item>
     
     <item>
-      <title>BPF Performance Toolsを読んだ</title>
-      <link>https://ntoofu.github.io/blog/post/read-bpf-performance-tools/</link>
-      <pubDate>Sat, 31 Oct 2020 00:00:00 +0000</pubDate>
-      
-      <guid>https://ntoofu.github.io/blog/post/read-bpf-performance-tools/</guid>
-      <description>BPFを学ぶ上で難しいのは、どのようにコードを書くかではなく、BPFで何をするか（数千あるイベントのどれをトレースするか…とか）だ
- Introduction   パケットキャプチャのパフォーマンス改善をする技術として開発(1992), 汎用的な実行基盤として書き換え(2014)   </description>
-    </item>
-    
-    <item>
       <title>Eclipse TitanでTTCN-3を試した</title>
       <link>https://ntoofu.github.io/blog/post/eclipse-titan/</link>
       <pubDate>Sun, 26 Jul 2020 00:00:00 +0000</pubDate>
