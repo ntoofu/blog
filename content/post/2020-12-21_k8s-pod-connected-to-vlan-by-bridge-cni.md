@@ -45,7 +45,7 @@ KubernetesもこのCNIに対応していて、適切に設定することでPod�
 * （必要に応じて）IPアドレスをnetns内のインターフェイスに割り当てる
 * 設定によってはこのbridgeを介して外部にSNAT(Masquerade)でIPによる通信が出来るようホストを設定する
 
-といったものになっている。直接使うことはあまりないかもしれないが、実は今なにも考えずにflannelを利用すれば[内部的にbridgeプラグインを呼び出し](https://github.com/containernetworking/plugins/blob/master/plugins/meta/flannel/flannel_linux.go#L59)ている。
+といったものになっている。直接使うことはあまりないかもしれないが、実は今なにも考えずにflannelを利用すれば([これ](https://github.com/coreos/flannel/blob/4b015d01fe2db9988f2d3f2d451553fcfcca490a/Documentation/kube-flannel.yml)を使ってインストールした場合)[内部的にbridgeプラグインを呼び出し](https://github.com/containernetworking/plugins/blob/e13bab99e54b4a34375450518d7db7a3da825e44/plugins/meta/flannel/flannel_linux.go#L59)ている。
 
 更にこのbridgeプラグインは、Linux bridge interfaceの [vlan_filtering](https://developers.redhat.com/blog/2017/09/14/vlan-filter-support-on-bridge/) 利用できるようになっている。余談だが、[このPR](https://github.com/containernetworking/plugins/pull/231)で実装されたようなので、以前検証した時にはなく、今回自分でプラグインを作成または拡張しようとして、参考にソースコードを読み込んでいて気がついた。
 

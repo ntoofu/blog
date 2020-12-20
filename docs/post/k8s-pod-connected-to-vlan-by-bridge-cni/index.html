@@ -17,7 +17,7 @@ KubernetesもこのCNIに対応していて、適切に設定することでPod�
 今回はCNIプラグインとして以下で説明するMultus CNIとbridgeプラグインを使うことで、目的を果たせることを検証していく。
 Multus CNI これも過去に少し調べて書いているが、簡単に言えば複数のCNIプラグインを呼び出せるようにするためのCNIプラグインで、コンテナ（Kubernetes的にはPod）の中に複数のネットワークインターフェイスを与えることなどが可能になる。
 bridge CNI plugin 標準的なCNIプラグインとして https://github.com/containernetworking/ の下で提供されている。主なところとしては
- Linux bridge interfaceを（無ければ）ホストに作成する コンテナが利用するnetns(network namespace)内と、ホストを結ぶLinux veth interfaceを作成する （必要に応じて）IPアドレスをnetns内のインターフェイスに割り当てる 設定によってはこのbridgeを介して外部にSNAT(Masquerade)でIPによる通信が出来るようホストを設定する  といったものになっている。直接使うことはあまりないかもしれないが、実は今なにも考えずにflannelを利用すれば内部的にbridgeプラグインを呼び出している。
+ Linux bridge interfaceを（無ければ）ホストに作成する コンテナが利用するnetns(network namespace)内と、ホストを結ぶLinux veth interfaceを作成する （必要に応じて）IPアドレスをnetns内のインターフェイスに割り当てる 設定によってはこのbridgeを介して外部にSNAT(Masquerade)でIPによる通信が出来るようホストを設定する  といったものになっている。直接使うことはあまりないかもしれないが、実は今なにも考えずにflannelを利用すれば(これを使ってインストールした場合)内部的にbridgeプラグインを呼び出している。
 更にこのbridgeプラグインは、Linux bridge interfaceの vlan_filtering 利用できるようになっている。余談だが、このPRで実装されたようなので、以前検証した時にはなく、今回自分でプラグインを作成または拡張しようとして、参考にソースコードを読み込んでいて気がついた。
 これを上手く使えば、必要なネットワークの定義などをほとんどKubernetesのmanifestに完結させて行うことが出来るはずなので、それを確認していく。
 他のプラグイン https://github.com/containernetworking/plugins/ の中には、他にもプラグインがあるのでそれについても少し言及しておく。
@@ -132,7 +132,7 @@ bridge CNI plugin 標準的なCNIプラグインとして https://github.com/con
 <li>設定によってはこのbridgeを介して外部にSNAT(Masquerade)でIPによる通信が出来るようホストを設定する</li>
 </ul>
 
-<p>といったものになっている。直接使うことはあまりないかもしれないが、実は今なにも考えずにflannelを利用すれば<a href="https://github.com/containernetworking/plugins/blob/master/plugins/meta/flannel/flannel_linux.go#L59">内部的にbridgeプラグインを呼び出し</a>ている。</p>
+<p>といったものになっている。直接使うことはあまりないかもしれないが、実は今なにも考えずにflannelを利用すれば(<a href="https://github.com/coreos/flannel/blob/4b015d01fe2db9988f2d3f2d451553fcfcca490a/Documentation/kube-flannel.yml">これ</a>を使ってインストールした場合)<a href="https://github.com/containernetworking/plugins/blob/e13bab99e54b4a34375450518d7db7a3da825e44/plugins/meta/flannel/flannel_linux.go#L59">内部的にbridgeプラグインを呼び出し</a>ている。</p>
 
 <p>更にこのbridgeプラグインは、Linux bridge interfaceの <a href="https://developers.redhat.com/blog/2017/09/14/vlan-filter-support-on-bridge/">vlan_filtering</a> 利用できるようになっている。余談だが、<a href="https://github.com/containernetworking/plugins/pull/231">このPR</a>で実装されたようなので、以前検証した時にはなく、今回自分でプラグインを作成または拡張しようとして、参考にソースコードを読み込んでいて気がついた。</p>
 
