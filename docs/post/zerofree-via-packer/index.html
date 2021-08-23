@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<meta name="generator" content="Hugo 0.53" />
+		<title>PackerからzerofreeによりOVAイメージのサイズを小さくする方法 - ntoofu</title>
+
+		<meta name="description" content="日頃仮想マシンやハイパーバイザ周辺を見ていることが多く、 仮想マシンイメージの自動ビルドを整備するような機会も少なくない。
+仮想マシンのイメージをビルドする際、そのサイズを小さく抑えることは重要で、様々な恩恵がある。 （これは、コンテナの長所の一つにその軽量さが挙げられることからも想像できると思う。）
+少々ニッチなケースではあるが、仮想マシンイメージのサイズを縮める部分で工夫を要する状況に遭遇したので、 その時の対処をメモしておく。 なお、ビルドの実行環境はvSphereを前提にしている。 それ以外の環境でこの手順が必要になるケースがあるかどうかは定かでないが、 vSphereに強く依存した手順ではないため、必要になった場合は応用できると思われる。
+予備知識 HashiCorp Packer https://www.packer.io/
+仮想マシンイメージやコンテナイメージのビルド手順を自動化する際によく使われるソフトウェア。 ビルド環境として各種IaaSやvSphere等仮想化基盤をサポートしている。
+OVF/OVA 仮想マシンの仮想ハードウェアとしての仕様を記述するOVF(Open Virtualization Format)というフォーマットがあり、vSphereでも仮想マシンのインポート・エクスポートに使われている。
+実際にインポート・エクスポートを行う際は、 OVFファイルに加えてディスクイメージ(vSphereだとVMDK形式)が使用される。 そのため、これらディスクイメージやそのハッシュ値を収めたファイル等とOVFファイルをまとめて TAR形式でアーカイブし、使い勝手を良くした状態で扱うこともあり、このアーカイブファイルをOVAと呼ぶ。
+zerofree OVF&#43;ディスクイメージをエクスポートする際、vSphereではディスクイメージ中に存在する NULLブロック (0x00 のみのブロック) の記録を省略し ファイルサイズを小さくするように動く。 （それを示す記述として探した中で一番近いものは このドキュメントの &ldquo;The disk files are stored in a compressed, sparse format.&rdquo; であり、詳細は記載されていないが、 実際の結果などを見る限りNULLブロックの記録が省かれるようである。）
+Thin provisioning で仮想ディスクを利用している場合、仮想マシンがブロックを利用するまで実際にはブロックを確保しないため、 未使用の領域はディスクイメージに含まれることはない。 しかしながら、仮想マシン内でファイル作成後に削除した場合など、一度使ったが解放したブロックというものが通常は存在する。 そして、それらは通常再利用され新しいデータで上書きされることになるため、ファイルシステムはわざわざコストをかけてゼロ埋めしない。 結果として、すでに削除したデータが残っているだけの不要なブロックが、エクスポート後のディスクイメージに含まれてしまう。
+そのため、仮想マシンのディスクイメージをエクスポートする前に、データを保持していないブロックをゼロ埋めしておくことで、 エクスポート後のサイズを縮めることが可能になる。これを実現するツールが zerofreeコマンドになる。
+ただし、利用中のブロックをどう管理しているかはファイルシステムに依存しており、 zerofreeはext2, ext3, ext4しかサポートしていないようなので、その点に注意が必要である。 また、対象のファイルシステムがread-onlyでマウントされていないと利用できないという制限もある。
+ここまで、仮想マシンのエクスポートに際しては事前にzerofreeを実行するとイメージのサイズを縮められるという話をしたが、 実際にはもっとスマートな方法が存在する。
+fstrim HDDのような記録媒体であれば、前述のようにわざわざブロックをゼロ埋めする必要はなく、そういった処理は通常されない。 しかし、HDDとは記憶の仕組みが異なるSSDにおいては、データを上書きするような場合に、物理的には記憶素子に対し一度初期化を 行ってからデータを書き込むような手順が必要であるらしい。 （それも、ある程度まとまった単位で初期化する必要があり、変更がない部分も書き戻す必要が生じて相応のコストがかかるらしい。） そのせいで、長期間SSDを利用した場合に書き込み速度が低下するようなことが起こりうる。
+それに対し、不要になったデータを保持している素子について、予め非同期的に初期化しておけば、 その箇所を再利用する際の初期化の手間を省き、書き込み速度の低下を軽減できると考えられる。 これを実現するために、SSDのような記録媒体に対し、データが不要となったことを通知するための方法が存在する。 ATAのデバイスにおいてはTRIM, SCSIデバイスにおいてはUNMAPと呼ばれる命令がそれである。 （余談: コンシューマにSSDが流行りだした当時、自作PC関連の情報をよく追っていたが、 TRIMの対応に関しては自作PC界隈でもよく取り上げられた話題だったと記憶している。）">
+
+		<meta name="google-site-verification" content="-dM2-3-X8FeQrDaA7h-n_6oJ7drfIg3AD4AjEvr6LGw" />
+
+		
+		
+		
+        <link rel="stylesheet" href="https://ntoofu.github.io/blog/css/ui.min.css"/>
+		
+		
+		
+
+		<link  rel="stylesheet" href="https://fonts.googleapis.com/css?family=Fira+Mono|Lato|Raleway">
+
+		
+
+		<style>
+	a { color: #2c6be0; }
+	blockquote {
+		border-left-color: #2c6be0;
+		border-right-color: #2c6be0; }
+	.bar a:hover {
+		color: #2c6be0;
+		text-decoration: none; }
+	.sep {
+		margin-top: 2rem;
+		margin-bottom: 1rem;
+		margin-left:0;
+		width: 24rem;
+		border-top: 2px solid #2c6be0; }
+</style>
+
+	</head>
+
+<body>
+<header class="container no-print">
+	<div class="u-header">
+		<nav class="bar">
+	<ul><li>
+			<a href="https://ntoofu.github.io/blog/">
+                <img class="icon-text" src="https://ntoofu.github.io/blog/img/prev.svg"/>
+			</a>
+		</li><li><a href="https://ntoofu.github.io/blog/about/">About</a></li><li><a href="https://ntoofu.github.io/blog/post/">Posts</a></li><li><a href="https://ntoofu.github.io/blog/work/">Works</a></li></ul>
+</nav>
+
+	</div>
+</header>
+<main class="container">
+
+<article>
+	<header><hgroup id="brand">
+	<h1>PackerからzerofreeによりOVAイメージのサイズを小さくする方法</h1>
+	<h5>
+		
+		<time datetime="2021-08-24 00:00:00 &#43;0000 UTC">2021-08-24</time>
+		<span class="no-print">
+			<span>
+	</h5>
+	
+</hgroup>
+<hr class="sep" />
+</header>
+	
+
+<p>日頃仮想マシンやハイパーバイザ周辺を見ていることが多く、
+仮想マシンイメージの自動ビルドを整備するような機会も少なくない。</p>
+
+<p>仮想マシンのイメージをビルドする際、そのサイズを小さく抑えることは重要で、様々な恩恵がある。
+（これは、コンテナの長所の一つにその軽量さが挙げられることからも想像できると思う。）</p>
+
+<p>少々ニッチなケースではあるが、仮想マシンイメージのサイズを縮める部分で工夫を要する状況に遭遇したので、
+その時の対処をメモしておく。
+なお、ビルドの実行環境はvSphereを前提にしている。
+それ以外の環境でこの手順が必要になるケースがあるかどうかは定かでないが、
+vSphereに強く依存した手順ではないため、必要になった場合は応用できると思われる。</p>
+
+<h1 id="予備知識">予備知識</h1>
+
+<h2 id="hashicorp-packer">HashiCorp Packer</h2>
+
+<p><a href="https://www.packer.io/">https://www.packer.io/</a></p>
+
+<p>仮想マシンイメージやコンテナイメージのビルド手順を自動化する際によく使われるソフトウェア。
+ビルド環境として各種IaaSやvSphere等仮想化基盤をサポートしている。</p>
+
+<h2 id="ovf-ova">OVF/OVA</h2>
+
+<p>仮想マシンの仮想ハードウェアとしての仕様を記述するOVF(Open Virtualization Format)というフォーマットがあり、vSphereでも仮想マシンのインポート・エクスポートに使われている。</p>
+
+<p>実際にインポート・エクスポートを行う際は、
+OVFファイルに加えてディスクイメージ(vSphereだとVMDK形式)が使用される。
+そのため、これらディスクイメージやそのハッシュ値を収めたファイル等とOVFファイルをまとめて
+TAR形式でアーカイブし、使い勝手を良くした状態で扱うこともあり、このアーカイブファイルをOVAと呼ぶ。</p>
+
+<h2 id="zerofree">zerofree</h2>
+
+<p>OVF+ディスクイメージをエクスポートする際、vSphereではディスクイメージ中に存在する NULLブロック (<code>0x00</code> のみのブロック) の記録を省略し
+ファイルサイズを小さくするように動く。
+（それを示す記述として探した中で一番近いものは
+<a href="https://docs.vmware.com/en/VMware-vSphere/7.0/com.vmware.vsphere.vm_admin.doc/GUID-B05A4E9F-DD21-4397-95A1-00125AFDA9C8.html">このドキュメント</a>の
+<em>&ldquo;The disk files are stored in a compressed, sparse format.&rdquo;</em> であり、詳細は記載されていないが、
+実際の結果などを見る限りNULLブロックの記録が省かれるようである。）</p>
+
+<p>Thin provisioning で仮想ディスクを利用している場合、仮想マシンがブロックを利用するまで実際にはブロックを確保しないため、
+未使用の領域はディスクイメージに含まれることはない。
+しかしながら、仮想マシン内でファイル作成後に削除した場合など、一度使ったが解放したブロックというものが通常は存在する。
+そして、それらは通常再利用され新しいデータで上書きされることになるため、ファイルシステムはわざわざコストをかけてゼロ埋めしない。
+結果として、すでに削除したデータが残っているだけの不要なブロックが、エクスポート後のディスクイメージに含まれてしまう。</p>
+
+<p>そのため、仮想マシンのディスクイメージをエクスポートする前に、データを保持していないブロックをゼロ埋めしておくことで、
+エクスポート後のサイズを縮めることが可能になる。これを実現するツールが <a href="http://manpages.ubuntu.com/manpages/focal/man8/zerofree.8.html">zerofree</a>コマンドになる。</p>
+
+<p>ただし、利用中のブロックをどう管理しているかはファイルシステムに依存しており、
+zerofreeはext2, ext3, ext4しかサポートしていないようなので、その点に注意が必要である。
+また、対象のファイルシステムがread-onlyでマウントされていないと利用できないという制限もある。</p>
+
+<p>ここまで、仮想マシンのエクスポートに際しては事前にzerofreeを実行するとイメージのサイズを縮められるという話をしたが、
+実際にはもっとスマートな方法が存在する。</p>
+
+<h2 id="fstrim">fstrim</h2>
+
+<p>HDDのような記録媒体であれば、前述のようにわざわざブロックをゼロ埋めする必要はなく、そういった処理は通常されない。
+しかし、HDDとは記憶の仕組みが異なるSSDにおいては、データを上書きするような場合に、物理的には記憶素子に対し一度初期化を
+行ってからデータを書き込むような手順が必要であるらしい。
+（それも、ある程度まとまった単位で初期化する必要があり、変更がない部分も書き戻す必要が生じて相応のコストがかかるらしい。）
+そのせいで、長期間SSDを利用した場合に書き込み速度が低下するようなことが起こりうる。</p>
+
+<p>それに対し、不要になったデータを保持している素子について、予め非同期的に初期化しておけば、
+その箇所を再利用する際の初期化の手間を省き、書き込み速度の低下を軽減できると考えられる。
+これを実現するために、SSDのような記録媒体に対し、データが不要となったことを通知するための方法が存在する。
+ATAのデバイスにおいてはTRIM, SCSIデバイスにおいてはUNMAPと呼ばれる命令がそれである。
+（余談: コンシューマにSSDが流行りだした当時、自作PC関連の情報をよく追っていたが、
+TRIMの対応に関しては自作PC界隈でもよく取り上げられた話題だったと記憶している。）</p>
+
+<p>このコマンドはthin provisionedな仮想ディスクについても有用で、TRIM/UNMAPをゲストOSが発行すれば、
+不要なブロックをハイパーバイザが知ることが可能となる。
+したがって、エクスポート時にNULLブロックが省略されることに期待せずとも、不要なブロックは最初からエクスポートされないようにできる。</p>
+
+<p>ただし動作には一定の条件があり、
+<a href="https://docs.vmware.com/en/VMware-vSphere/7.0/com.vmware.vsphere.storage.doc/GUID-5E1396BE-6EA8-4A6B-A458-FC9718E2C55B.html">ドキュメント</a>
+にあるようにvSphere環境については</p>
+
+<ul>
+<li>VMFS6の一部の例外を除いた通常のケースと、VMFS5で一定の条件を満たしたケースにおいて、ゲストOS上で発行されたTRIM/UNMAPが自動的にバックエンドの物理ストレージデバイスにまで渡される</li>
+<li>VMFS6の一部の例外ケースと、VMFS5の通常のケースにおいて、ESXiで <code>esxcli storage vmfs unmap</code> を実行することでバックエンドの物理ストレージデバイスにUNMAPが発行される</li>
+</ul>
+
+<p>という挙動になる。また、NFSのデータストアでは対応していない。</p>
+
+<p>OS側の対応としては、10年以上前から存在するコマンドではあるので、大抵はサポートされているようだが、
+ファイル削除時などに自動でTRIM/UNMAPを発行するのかは設定による部分もあり、
+例えばext4ファイルシステムの場合マウントオプション <code>discard</code> の指定が必要になる。
+自動でTRIM/UNMAPが発行されなくても、手動で発行する方法もあり、例えば<a href="http://manpages.ubuntu.com/manpages/focal/man8/fstrim.8.html">fstrim</a>コマンドがその一例となる。</p>
+
+<p>つまるところ、VMFS5以降を利用していれば、zerofreeを使わずともfstrimでも不要なブロックのエクスポートの抑止は実現できる。
+（条件によってはfstrimの実行すら不要である。）</p>
+
+<h1 id="問題点">問題点</h1>
+
+<p>エクスポート後のイメージのサイズを削減するためには、不要なファイルを削除した上で、通常はfstrimを利用すれば良い。
+しかしながら、NFSデータストアを利用している場合など、zerofreeに頼る他ないケースも存在する。</p>
+
+<p>しかし、zerofreeを実行するには対象のファイルシステムがread-onlyである必要があるため、
+動作中のシステムでroot filesystemに対して実行することは難しい。
+通常は、single user modeでログインして操作するような手順が一般的であると思う。</p>
+
+<p>packerを使った自動ビルドをしている場合、エクスポート前にsingle user modeでの操作を差し挟むのは非常に困難になる。
+（ <code>vmware-iso</code> builderなどはvSphereの機能としてのコンソール接続を利用できるため、不可能ということはないが、
+大抵はSSH接続可能になる段階からはSSH接続を経由してプロビジョニングを実施するようにしてしまい、それが終わってから
+single user modeで操作することはおそらくできないと思われる。）</p>
+
+<p>以下では、この問題を回避してpackerのprovisionerの中でzerofreeを実行する方法を紹介する。</p>
+
+<h1 id="解決方法">解決方法</h1>
+
+<h2 id="概要">概要</h2>
+
+<ul>
+<li>起動最初期にはroot filesystemはread-onlyマウントされている
+
+<ul>
+<li>これはLinuxのブートシーケンスについて調べると分かるが、起動時にはread-onlyでマウントされ、すぐにrwで再マウントされる　　</li>
+</ul></li>
+<li>その僅かなタイミングにzerofreeを流せるようsystemdのserviceを仕立てる
+
+<ul>
+<li><code>systemd-remount-fs.service</code> というサービスが再マウントをしているので、その前に実行できれば良い</li>
+</ul></li>
+</ul>
+
+<h2 id="手順">手順</h2>
+
+<p>packerとしては、以下のような流れをshell provisionerなどを使って実現する。</p>
+
+<ul>
+<li>（仮想マシンイメージのプロビジョニング処理を一通り済ませる）</li>
+<li>zerofreeをインストールする</li>
+<li>キャッシュ等のイメージに不要なファイルを削除する</li>
+
+<li><p>以下のようなunit fileを書いてserviceを用意し(<code>zerofree-root.service</code> とする)、 <code>systemctl daemon-reload</code> して <code>systemctl enable zerofree-root.service</code> で有効化</p>
+
+<pre><code>[Unit]
+DefaultDependencies=no
+Before=systemd-remount-fs.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'zerofree $(grep &quot;^/&quot; /etc/fstab | awk &quot;\\$2 == \\&quot;/\\&quot; { print \\$1 }&quot;)'
+RemainAfrterExit=yes
+TimeoutSec=infinity
+
+[Install]
+WantedBy=local-fs-pre.target
+</code></pre></li>
+
+<li><p>reboot</p>
+
+<ul>
+<li>再起動するので、shell provisionerの <code>expect_disconnect</code> <code>skip_clean</code> は trueにしておくなどの工夫は必要</li>
+<li>この起動直後のタイミングで、先程のサービスが動きだし、zerofreeしてくれる</li>
+</ul></li>
+
+<li><p>起動後、<code>systemctl disable zerofree-root.service</code> で無効化しておく</p>
+
+<ul>
+<li>再起動を待つためにshell provisionerの <code>pause_before</code> などをうまく使うと良い</li>
+</ul></li>
+</ul>
+
+<h1 id="まとめ">まとめ</h1>
+
+<ul>
+<li>packerとかでOVAイメージを作っているようなときに、そのサイズを縮める方法
+
+<ul>
+<li>fstrimを使う (VMFS5以上を使っているとき)</li>
+<li>工夫してzerofreeを使う (NFSデータストアなどの場合)</li>
+</ul></li>
+<li>root filesystemをpackerからzerofree実行するには
+
+<ul>
+<li><code>systemd-remount-fs.service</code> より前にzerofreeを実行するserviceを書いて実行させよう</li>
+</ul></li>
+</ul>
+
+</article>
+<nav class="no-print post-nav">
+
+	<a class="prev-post" href="https://ntoofu.github.io/blog/post/pcap-for-tls-traffic/">
+        <img class="icon-text" src="https://ntoofu.github.io/blog/img/prev.svg"/>TLSのパケットキャプチャ方法</a>
+
+
+</nav>
+
+
+
+
+			<hr class="sep" />
+		</main>
+		<footer class="container no-print">
+			<div class="u-footer">
+				
+
+<a href="https://github.com/ntoofu/"><img class="icon-social" src="https://ntoofu.github.io/blog/img/github.svg" alt="Github"/></a>
+
+
+<a href="https://twitter.com/ntoofu"><img class="icon-social" src="https://ntoofu.github.io/blog/img/twitter.svg" alt="Twitter"/></a>
+
+<a href="https://ntoofu.github.io/blog/index.xml" target="_blank"><img class="icon-social" src="https://ntoofu.github.io/blog/img/feed.svg" alt="Feed"></a>
+
+				<p>
+					
+					Theme used: <a href="https://github.com/yursan9/manis-hugo-theme">Manis</a><br>
+					
+					
+					&copy; 2018 ntoofu
+					
+					
+				</p>
+				
+				<a href="#brand">
+                    <img class="icon-text" src="https://ntoofu.github.io/blog/img/toup.svg" alt="To Up"/>
+					<span>Back to Up</span>
+				</a>
+				
+			</div>
+		</footer>
+		
+	</body>
+</html>
+
