@@ -3,6 +3,11 @@
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   
   <url>
+    <loc>https://ntoofu.github.io/blog/post/docker-to-vsphere/</loc>
+    <lastmod>2021-09-19T23:05:00+09:00</lastmod>
+  </url>
+  
+  <url>
     <loc>https://ntoofu.github.io/blog/post/zerofree-via-packer/</loc>
     <lastmod>2021-08-24T00:33:42+09:00</lastmod>
   </url>
@@ -97,7 +102,7 @@
   
   <url>
     <loc>https://ntoofu.github.io/blog/</loc>
-    <lastmod>2021-08-24T00:33:42+09:00</lastmod>
+    <lastmod>2021-09-19T23:05:00+09:00</lastmod>
     <priority>0</priority>
   </url>
   

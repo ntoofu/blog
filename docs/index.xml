@@ -6,10 +6,25 @@
     <description>Recent content on ntoofu</description>
     <generator>Hugo -- gohugo.io</generator>
     <copyright>&amp;copy; 2018 ntoofu</copyright>
-    <lastBuildDate>Tue, 24 Aug 2021 00:00:00 +0000</lastBuildDate>
+    <lastBuildDate>Sun, 19 Sep 2021 00:00:00 +0000</lastBuildDate>
     
 	<atom:link href="https://ntoofu.github.io/blog/index.xml" rel="self" type="application/rss+xml" />
     
+    
+    <item>
+      <title>DockerコンテナイメージをvSphere仮想マシンイメージに変換する</title>
+      <link>https://ntoofu.github.io/blog/post/docker-to-vsphere/</link>
+      <pubDate>Sun, 19 Sep 2021 00:00:00 +0000</pubDate>
+      
+      <guid>https://ntoofu.github.io/blog/post/docker-to-vsphere/</guid>
+      <description>Dockerでコンテナイメージをビルドしてから変換することで、仮想マシンイメージを作成することができたので、その方法を説明する。
+背景 ソフトウェア動作環境として、仮想マシンよりもコンテナを利用することのほうが最近は一般的になっており、 技術の流行に従えば、あえてコンテナを仮想マシンに変換するようなことは必要ないようにも思われるかもしれない。 確かに、DevOpsのサイクルを高速に回す上で、コンテナの軽量さはメリットであるし、 Kubernetesのようにデプロイを含めたライフサイクルを管理するツールがあるため、 Continuous Deploymentを導入しやすいという点も大きい。 （このあたりは、その軽量さも相まって仮想マシンに比べImmutable Infrastructureに向いていることが影響していると思う。）
+しかしながら、以下のような理由により、仮想マシンを使い続ける場面も多くある。
+ ネットワークの要件により、コンテナとしてデプロイすることが難しいことがある  物理機器とのL2での疎通性が必要な場合など CNIプラグインによりコンテナでも理屈の上では実現できることも多いが、ファイアウォールを適用することに難があったり、パフォーマンス上の懸念も残るなど、直ちに実用できるとは言い難い  既存の資産の有効活用  仮想マシンを前提に出来上がった運用があると、移行コストがかさむため、直ちにコンテナ化するとは限らない   とはいえ、仮想マシンのイメージのビルドは、コンテナのイメージのビルドに比較すると、通常手間がかかるのも事実である。 仮想マシンをデプロイし、SSHなどを利用してパッケージのインストールなどのプロビジョニングを実施するため、 オーバーヘッドも避けられない上に、そもそも仮想マシンをデプロイする環境がないとビルドできない。
+そこで、ビルドを簡略化しようという狙いで、Dockerコンテナイメージをビルドし、 それを仮想マシンのイメージに変換するということをやってみた。
+手順 PoC https://github.com/ntoofu/docker-to-vsphere
+ build.sh を実行し、生成される build/vm.ovf をインポートすればOK （手順の詳細はこのリポジトリの中身を見たほうが良いかもしれない）  内容  alpine などのディストリビューションのイメージをもとに、通常通りDockerfileを作ってコンテナビルドするが、以下の工夫をする  Linux kernelをインストールする  apk add linux-virt  /etc/fstab /boot/grub/grub.cfg をイメージに追加する OpenRCや、関連して必要になるパッケージを追加する  openrc busybox-initscripts e2fsprogs  システム的に必要なサービスの自動起動設定をする  docker build  試していないが、 kaniko などでビルドするほうが（CI環境でdocker buildさせる場合はDocker in Dockerなどの工夫が必要になりがちで、それを避けられるため）都合がよいかもしれない  ビルドしたイメージからコンテナを作成し、そのコンテナのファイルをアーカイブファイルとして出力する  docker export でアーカイブファイルとしてコンテナ内のファイルを出力できる  dd などで空のイメージファイルを作成し、 parted などでパーティションテーブルを作成 イメージファイルに対応するloopbackデバイスを作成し、パーティションにファイルシステムを作成（フォーマット） loopbackデバイスをマウントし、その中にコンテナのアーカイブファイルを展開  後述する理由で、 .</description>
+    </item>
     
     <item>
       <title>PackerからzerofreeによりOVAイメージのサイズを小さくする方法</title>
