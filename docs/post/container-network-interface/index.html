@@ -3,11 +3,11 @@
 	<head>
 		<meta charset="utf-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<meta name="generator" content="Hugo 0.53" />
+		<meta name="generator" content="Hugo 0.98.0" />
 		<title>Container Network Interfaceについて調べた - ntoofu</title>
 
 		<meta name="description" content="社内のKubernetes勉強会で, 前より関心のあった Container Network Interface (CNI) の説明を することになった。その際の資料をここに書いておく。
-Container Network Interface (CNI) の基本 CNIとは何か  Linux container内のnetwork interfaceを設定するプラグインを書くための 仕様とライブラリからなるCNCFプロジェクト containerのネットワーク接続性を作ることと削除時の後始末だけを考えているため, 仕様は単純でサポート状況も良い(k8s専用というわけでもない) GitHub  CNIが生まれてきた背景  Linux containerが急速に発展しcontainer runtimeやオーケストレータが複数出てきた 環境依存しやすいネットワーク周りをplugableにする方法は確立されていなかった それぞれが独自に問題を解決する無駄を避けるべく, CNIが共通のインターフェイスを定める  元はと言えば rkt 用に考えられたものらしい   CNI plugins  CNIに準拠したpluginはたくさんあり, READMEにも書いてある Golangで書かれたものは多いが, CNIは言語については規定していないため何で書いても良い  CNI仕様  SPEC.mdに仕様が記されている CNI からすれば container = Linux network namespace (netns) (runtimeによりnetnsを作る単位が異なるが, CNIとしてはcontainer = network namespaceとみなす)  そもそも, Linux containerから見えるネットワークインターフェイスは コンテナ用のnetns内のinterfaceでしかない  &ldquo;network&rdquo; ごとに, どのpluginを用いるかなどの設定をCNIが定めるJSON形式で用意する  name: host内で一意な, networkを表す名前 type: そのnetworkで使うCNI pluginの実行ファイル名を指定 cniVersion: CNI specのバージョン ipam: I/FへのIPアドレス割り当てを管理するIPAM pluginの設定 dns: container(netns)に対するDNSを設定する その他, plugin固有の設定 (e.">
+Container Network Interface (CNI) の基本 CNIとは何か  Linux container内のnetwork interfaceを設定するプラグインを書くための 仕様とライブラリからなるCNCFプロジェクト containerのネットワーク接続性を作ることと削除時の後始末だけを考えているため, 仕様は単純でサポート状況も良い(k8s専用というわけでもない) GitHub  CNIが生まれてきた背景  Linux containerが急速に発展しcontainer runtimeやオーケストレータが複数出てきた 環境依存しやすいネットワーク周りをplugableにする方法は確立されていなかった それぞれが独自に問題を解決する無駄を避けるべく, CNIが共通のインターフェイスを定める  元はと言えば rkt 用に考えられたものらしい    CNI plugins  CNIに準拠したpluginはたくさんあり, READMEにも書いてある Golangで書かれたものは多いが, CNIは言語については規定していないため何で書いても良い  CNI仕様  SPEC.mdに仕様が記されている CNI からすれば container = Linux network namespace (netns) (runtimeによりnetnsを作る単位が異なるが, CNIとしてはcontainer = network namespaceとみなす)  そもそも, Linux containerから見えるネットワークインターフェイスは コンテナ用のnetns内のinterfaceでしかない   &ldquo;network&rdquo; ごとに, どのpluginを用いるかなどの設定をCNIが定めるJSON形式で用意する  name: host内で一意な, networkを表す名前 type: そのnetworkで使うCNI pluginの実行ファイル名を指定 cniVersion: CNI specのバージョン ipam: I/FへのIPアドレス割り当てを管理するIPAM pluginの設定 dns: container(netns)に対するDNSを設定する その他, plugin固有の設定 (e.">
 
 		<meta name="google-site-verification" content="-dM2-3-X8FeQrDaA7h-n_6oJ7drfIg3AD4AjEvr6LGw" />
 
@@ -69,15 +69,10 @@ Container Network Interface (CNI) の基本 CNIとは何か  Linux container内�
 </hgroup>
 <hr class="sep" />
 </header>
-	
-
-<p>社内のKubernetes勉強会で, 前より関心のあった Container Network Interface (CNI) の説明を
+	<p>社内のKubernetes勉強会で, 前より関心のあった Container Network Interface (CNI) の説明を
 することになった。その際の資料をここに書いておく。</p>
-
 <h2 id="container-network-interface-cni-の基本">Container Network Interface (CNI) の基本</h2>
-
 <h3 id="cniとは何か">CNIとは何か</h3>
-
 <ul>
 <li>Linux container内のnetwork interfaceを設定するプラグインを書くための
 仕様とライブラリからなるCNCFプロジェクト</li>
@@ -85,40 +80,33 @@ Container Network Interface (CNI) の基本 CNIとは何か  Linux container内�
 仕様は単純でサポート状況も良い(k8s専用というわけでもない)</li>
 <li><a href="https://github.com/containernetworking/cni">GitHub</a></li>
 </ul>
-
 <h3 id="cniが生まれてきた背景">CNIが生まれてきた背景</h3>
-
 <ul>
 <li>Linux containerが急速に発展しcontainer runtimeやオーケストレータが複数出てきた</li>
 <li>環境依存しやすいネットワーク周りをplugableにする方法は確立されていなかった</li>
 <li>それぞれが独自に問題を解決する無駄を避けるべく, CNIが共通のインターフェイスを定める
-
 <ul>
 <li>元はと言えば <code>rkt</code> 用に考えられたものらしい</li>
-</ul></li>
 </ul>
-
+</li>
+</ul>
 <h3 id="cni-plugins">CNI plugins</h3>
-
 <ul>
 <li>CNIに準拠したpluginはたくさんあり,
 <a href="https://github.com/containernetworking/cni#3rd-party-plugins">READMEにも書いてある</a></li>
 <li>Golangで書かれたものは多いが, CNIは言語については規定していないため何で書いても良い</li>
 </ul>
-
 <h2 id="cni仕様">CNI仕様</h2>
-
 <ul>
 <li><a href="https://github.com/containernetworking/cni/blob/master/SPEC.md">SPEC.md</a>に仕様が記されている</li>
 <li>CNI からすれば container = Linux network namespace (netns)
 (runtimeによりnetnsを作る単位が異なるが, CNIとしてはcontainer = network namespaceとみなす)
-
 <ul>
 <li>そもそも, Linux containerから見えるネットワークインターフェイスは
 コンテナ用のnetns内のinterfaceでしかない</li>
-</ul></li>
+</ul>
+</li>
 <li>&ldquo;network&rdquo; ごとに, どのpluginを用いるかなどの設定をCNIが定めるJSON形式で用意する
-
 <ul>
 <li><code>name</code>: host内で一意な, networkを表す名前</li>
 <li><code>type</code>: そのnetworkで使うCNI pluginの実行ファイル名を指定</li>
@@ -126,12 +114,12 @@ Container Network Interface (CNI) の基本 CNIとは何か  Linux container内�
 <li><code>ipam</code>: I/FへのIPアドレス割り当てを管理するIPAM pluginの設定</li>
 <li><code>dns</code>: container(netns)に対するDNSを設定する</li>
 <li>その他, plugin固有の設定 (e.g. host側bridge interface名など)</li>
-</ul></li>
+</ul>
+</li>
 <li>runtimeはCNIに従い, コンテナを希望のネットワークに接続するためpluginを呼び出す</li>
 <li>Layer2レベルでの疎通以上の, IPレベルでの設定について処理を共通化すべく
 IPAM pluginも用意されており(自作も可), アドレス設定などはそちらに任せる</li>
 </ul>
-
 <link href="https://ntoofu.github.io/blog/mermaid/mermaid.css" type="text/css" rel="stylesheet"/>
 <script defer src="https://unpkg.com/mermaid@7.1.2/dist/mermaid.js">mermaid.initialize({startOnLoad:true});</script>
 <div class="mermaid" align="left" >
@@ -170,32 +158,29 @@ graph TD
   ipam -- setup --> if_a1
 </div>
 
-
 <ul>
 <li>CNI pluginは&hellip;
-
 <ul>
 <li>runtimeから実行可能なファイルとして用意する</li>
 <li>次の操作に対応する
-
 <ul>
 <li>ADD: containerをネットワークに加える
-
 <ul>
 <li>container(=netns)にI/Fを作る</li>
 <li>hostに対して必要な変更を加える</li>
 <li>(適切なIPAM pluginを実行しIPアドレスのI/Fへのアサインとルートテーブルの調整をする)</li>
-</ul></li>
+</ul>
+</li>
 <li>DEL: ネットワークからcontainerを外す
-
 <ul>
 <li>指定されたcontainer(netns)の指定されたI/Fが持っているリソースを全て削除する</li>
-</ul></li>
+</ul>
+</li>
 <li>CHECK: containerのネットワーク設定が想定通りか確認する</li>
 <li>VERSION: サポートするCNI specのバージョン情報を返す</li>
-</ul></li>
+</ul>
+</li>
 <li>操作及びそれに必要なパラメータは環境変数と標準入力を使って受け渡しする
-
 <ul>
 <li><code>CNI_COMMAND</code>: 操作を指定 (<code>ADD</code>, <code>DEL</code>, <code>CHECK</code>, <code>VERSION</code>)</li>
 <li><code>CNI_CONTAINERID</code>: container ID = rutimeがcontainer(netns)に割り当てるユニークなID</li>
@@ -204,20 +189,21 @@ graph TD
 <li><code>CNI_ARGS</code>: 追加の引数 ( <code>FOO=BAR;ABC=123</code> のようなKey-Value形式で渡す )</li>
 <li><code>CNI_PATH</code>: CNI pluginの実行ファイルの検索パス</li>
 <li>標準入力: networkごとに定義されたJSON形式のconfigを受け渡す</li>
-</ul></li>
+</ul>
+</li>
 <li>結果は I/Fリスト, I/FごとのIP設定の情報, DNS情報 などをJSON形式で標準出力から返すのと,
 成否自体はreturn codeで示す</li>
-</ul></li>
+</ul>
+</li>
 <li>version 0.3.0以降, pluginのchainも定められ, 独自の設定をしやすくなった
-
 <ul>
 <li>network configirationを連ねて作ったconfiguration listsを用意し, runtimeはこれに従って
 複数のpluginを順に呼び出す</li>
 <li>runtimeは前のpluginの結果を <code>prevResult</code> 渡すため, 結果に応じた挙動ができる</li>
 <li>ユースケース: アドレス割り当て実施後, ホスト側のiptableをいじってNAT設定を変える等</li>
-</ul></li>
 </ul>
-
+</li>
+</ul>
 <link href="https://ntoofu.github.io/blog/mermaid/mermaid.css" type="text/css" rel="stylesheet"/>
 <script defer src="https://unpkg.com/mermaid@7.1.2/dist/mermaid.js">mermaid.initialize({startOnLoad:true});</script>
 <div class="mermaid" align="left" >
@@ -236,29 +222,25 @@ sequenceDiagram
   Plugin2-->>Runtime: Result
 </div>
 
-
 <h2 id="実験-docker-container-に-cni-plugin-でインターフェイスを足す">実験: Docker container に CNI plugin でインターフェイスを足す</h2>
-
 <ol>
-<li><p>テスト用のbridgeインターフェイスをhost上に準備</p>
-
-<pre><code>$ sudo ip link add test-bridge type bridge
+<li>
+<p>テスト用のbridgeインターフェイスをhost上に準備</p>
+<pre tabindex="0"><code>$ sudo ip link add test-bridge type bridge
 
 $ ip link show test-bridge
 23: test-bridge: &lt;BROADCAST,MULTICAST&gt; mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000
     link/ether 46:16:ad:0e:cd:6a brd ff:ff:ff:ff:ff:ff
 </code></pre></li>
-
-<li><p>CNI pluginの準備</p>
-
-<pre><code>$ git clone https://github.com/containernetworking/plugins.git
+<li>
+<p>CNI pluginの準備</p>
+<pre tabindex="0"><code>$ git clone https://github.com/containernetworking/plugins.git
 
 $ cd plugins &amp;&amp; ./build_linux.sh
 </code></pre></li>
-
-<li><p>テスト用コンテナを動かす(別のターミナルなどで)</p>
-
-<pre><code>$ docker run -it --rm --name cni_test alpine:latest /bin/sh -c 'watch -n 5 ip addr'
+<li>
+<p>テスト用コンテナを動かす(別のターミナルなどで)</p>
+<pre tabindex="0"><code>$ docker run -it --rm --name cni_test alpine:latest /bin/sh -c &#39;watch -n 5 ip addr&#39;
 
 Every 5s: ip addr                                           2019-01-14 13:28:33
 
@@ -273,10 +255,9 @@ Every 5s: ip addr                                           2019-01-14 13:28:33
     inet 172.17.0.2/16 brd 172.17.255.255 scope global eth0
         valid_lft forever preferred_lft forever
 </code></pre></li>
-
-<li><p>テスト用コンテナのnetnsにアクセスしてみる</p>
-
-<pre><code>$ docker inspect cni_test | jq -r '.[].NetworkSettings.SandboxKey'
+<li>
+<p>テスト用コンテナのnetnsにアクセスしてみる</p>
+<pre tabindex="0"><code>$ docker inspect cni_test | jq -r &#39;.[].NetworkSettings.SandboxKey&#39;
 /var/run/docker/netns/bf1e67c802ee
 
 $ sudo mkdir -p /var/run/netns
@@ -285,41 +266,39 @@ $ sudo ln -s /var/run/docker/netns/bf1e67c802ee /var/run/netns/cni_test
 
 $ sudo ip netns exec cni_test ip addr
 </code></pre></li>
-
-<li><p>CNI pluginを呼び出してみる</p>
-
-<pre><code>$ echo '{&quot;cniVersion&quot;: &quot;0.4.0&quot;, &quot;name&quot;: &quot;test&quot;, &quot;type&quot;: &quot;bridge&quot;, &quot;bridge&quot;: &quot;test-bridge&quot;, &quot;ipam&quot;: { &quot;type&quot;: &quot;static&quot;, &quot;addresses&quot;: [ { &quot;address&quot;: &quot;192.168.0.42/24&quot; } ] } }' | CNI_COMMAND=ADD CNI_CONTAINERID=hoge CNI_NETNS=/var/run/docker/netns/bf1e67c802ee CNI_IFNAME=test-if CNI_PATH=$PWD/bin sudo -E $PWD/bin/bridge
+<li>
+<p>CNI pluginを呼び出してみる</p>
+<pre tabindex="0"><code>$ echo &#39;{&#34;cniVersion&#34;: &#34;0.4.0&#34;, &#34;name&#34;: &#34;test&#34;, &#34;type&#34;: &#34;bridge&#34;, &#34;bridge&#34;: &#34;test-bridge&#34;, &#34;ipam&#34;: { &#34;type&#34;: &#34;static&#34;, &#34;addresses&#34;: [ { &#34;address&#34;: &#34;192.168.0.42/24&#34; } ] } }&#39; | CNI_COMMAND=ADD CNI_CONTAINERID=hoge CNI_NETNS=/var/run/docker/netns/bf1e67c802ee CNI_IFNAME=test-if CNI_PATH=$PWD/bin sudo -E $PWD/bin/bridge
 {
-    &quot;cniVersion&quot;: &quot;0.4.0&quot;,
-    &quot;interfaces&quot;: [
+    &#34;cniVersion&#34;: &#34;0.4.0&#34;,
+    &#34;interfaces&#34;: [
         {
-            &quot;name&quot;: &quot;test-bridge&quot;,
-            &quot;mac&quot;: &quot;32:b2:ce:3d:ec:f1&quot;
+            &#34;name&#34;: &#34;test-bridge&#34;,
+            &#34;mac&#34;: &#34;32:b2:ce:3d:ec:f1&#34;
         },
         {
-            &quot;name&quot;: &quot;veth38f6229d&quot;,
-            &quot;mac&quot;: &quot;32:b2:ce:3d:ec:f1&quot;
+            &#34;name&#34;: &#34;veth38f6229d&#34;,
+            &#34;mac&#34;: &#34;32:b2:ce:3d:ec:f1&#34;
         },
         {
-            &quot;name&quot;: &quot;test-if&quot;,
-            &quot;mac&quot;: &quot;c6:26:ea:d0:71:8f&quot;,
-            &quot;sandbox&quot;: &quot;/var/run/docker/netns/bf1e67c802ee&quot;
+            &#34;name&#34;: &#34;test-if&#34;,
+            &#34;mac&#34;: &#34;c6:26:ea:d0:71:8f&#34;,
+            &#34;sandbox&#34;: &#34;/var/run/docker/netns/bf1e67c802ee&#34;
         }
     ],
-    &quot;ips&quot;: [
+    &#34;ips&#34;: [
         {
-            &quot;version&quot;: &quot;4&quot;,
-            &quot;interface&quot;: 2,
-            &quot;address&quot;: &quot;192.168.0.42/24&quot;
+            &#34;version&#34;: &#34;4&#34;,
+            &#34;interface&#34;: 2,
+            &#34;address&#34;: &#34;192.168.0.42/24&#34;
         }
     ],
-    &quot;dns&quot;: {}
+    &#34;dns&#34;: {}
 }
 </code></pre></li>
-
-<li><p>コンテナ内にインターフェイスが増えていることを確認(手順3の出力を再度確認)</p>
-
-<pre><code>Every 5s: ip addr                                                                                2019-01-14 13:56:54
+<li>
+<p>コンテナ内にインターフェイスが増えていることを確認(手順3の出力を再度確認)</p>
+<pre tabindex="0"><code>Every 5s: ip addr                                                                                2019-01-14 13:56:54
 
 1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
@@ -337,87 +316,79 @@ $ sudo ip netns exec cni_test ip addr
        valid_lft forever preferred_lft forever
 </code></pre></li>
 </ol>
-
 <h2 id="kubernetes-と-cni">Kubernetes と CNI</h2>
-
 <h3 id="kubernetesのネットワーク">Kubernetesのネットワーク</h3>
-
 <ul>
 <li>Kubernetesのネットワーク実装に対する要件
-
 <ul>
 <li>全てのcontainerは互いにNAT無しに通信できる</li>
 <li>全てのnode対containerの通信はNAT無しに可能</li>
 <li>containerから見えるIPは他から見えるIPと同一</li>
-</ul></li>
+</ul>
+</li>
 <li>Container間(Pod内): <code>localhost</code> として通信可能
-
 <ul>
 <li>Pod単位でnetwork namespaceを作っている</li>
 <li>Kubernetestは &ldquo;IP-per-pod&rdquo; model = PodごとにIPが付く
-
 <ul>
 <li>(Container間でportの衝突は気にしないといけない)</li>
-</ul></li>
-</ul></li>
+</ul>
+</li>
+</ul>
+</li>
 <li>Pod間(Node内, Node間): PodについたIPアドレスで通信できる</li>
 <li>要件を満たす範囲で, 実装は<a href="https://kubernetes.io/docs/concepts/cluster-administration/addons/">複数</a>ある</li>
 </ul>
-
 <h3 id="cniの利用">CNIの利用</h3>
-
 <ul>
 <li>kubeletのNetworkPluginとして, Pod作成等の際に実行される
-
 <ul>
 <li><code>--network-plugin=cni</code> が設定された場合, 設定ファイル (デフォルト: <code>/etc/cni/net.d/</code>) から
 CNIのnetwork configuration listを読み出して利用</li>
-</ul></li>
+</ul>
+</li>
 <li>CNI pluginによってはPodにコントローラとして機能するコンテナを配置する必要があり,
 <code>DaemonSet</code> により設置する</li>
 <li>Pod間のACLとして機能する <code>NetworkPolicy</code> はnetwork pluginに実装を任せているため,
 pluginによってサポート有無が異なる</li>
 </ul>
-
 <h3 id="利用方法">利用方法</h3>
-
 <h2 id="cni-plugin-各論">CNI plugin 各論</h2>
-
 <ul>
 <li>一部独断でpickupして説明
-
 <ul>
 <li>Flannel</li>
 <li>Project Calico</li>
 <li>Multus</li>
-</ul></li>
 </ul>
-
+</li>
+</ul>
 <h3 id="flannel">Flannel</h3>
-
 <ul>
-<li>VXLANによる L2 over L3 ネットワークを実現する
-
+<li>
+<p>VXLANによる L2 over L3 ネットワークを実現する</p>
 <ul>
 <li>Control planeの情報は etcd を使って共有</li>
-</ul></li>
-<li><a href="https://github.com/containernetworking/plugins/tree/master/plugins/meta/flannel">Flannel CNI plugin</a>
-は Flannelのネットワーク情報を反映したconfigを生成して <code>bridge</code> CNI pluginなどを呼び出すだけ
-
+</ul>
+</li>
+<li>
+<p><a href="https://github.com/containernetworking/plugins/tree/master/plugins/meta/flannel">Flannel CNI plugin</a>
+は Flannelのネットワーク情報を反映したconfigを生成して <code>bridge</code> CNI pluginなどを呼び出すだけ</p>
 <ul>
 <li>デフォルトでは, <code>bridge</code> CNI plugin + <code>host-local</code> IPAM plugin を呼び出す</li>
-</ul></li>
-<li>通常の設定では, node内のbridgeネットワーク <code>cni0</code> にそれぞれ異なるsubnet(<code>/24</code>)が割り当てられるが,
-nodeからはFlunnelの仮想I/Fを通じてL2接続しているように見える
-
+</ul>
+</li>
+<li>
+<p>通常の設定では, node内のbridgeネットワーク <code>cni0</code> にそれぞれ異なるsubnet(<code>/24</code>)が割り当てられるが,
+nodeからはFlunnelの仮想I/Fを通じてL2接続しているように見える</p>
 <ul>
 <li>Nodeの異なるPod間でL2 broadcast domainが同じ、というわけではない様子
 ( <code>arping</code> が通じない事を確認 )</li>
-</ul></li>
-
-<li><p><a href="https://qiita.com/sugimount/items/ed07a3e77a6d4ab409a8">これ</a>が非常に詳しいが,
+</ul>
+</li>
+<li>
+<p><a href="https://qiita.com/sugimount/items/ed07a3e77a6d4ab409a8">これ</a>が非常に詳しいが,
 メカニズムは雑には以下の通り</p>
-
 <link href="https://ntoofu.github.io/blog/mermaid/mermaid.css" type="text/css" rel="stylesheet"/>
 <script defer src="https://unpkg.com/mermaid@7.1.2/dist/mermaid.js">mermaid.initialize({startOnLoad:true});</script>
 <div class="mermaid" align="left" >
@@ -445,32 +416,29 @@ nodeからはFlunnelの仮想I/Fを通じてL2接続しているように見え�
       flannel0 -- encapsulate & forward --> eth0
     </div>
 
-
 <ul>
 <li>Containerのroute table の default gatewayは <code>cni0</code> の IP を向く</li>
 <li>Hostには, flannelが利用するネットワーク全体(別host用に割り当てられたsubnetも含む)について
 <code>flannel.0</code> のIPに転送するrouteが設定される</li>
-</ul></li>
-
-<li><p>Network policy 非対応</p></li>
 </ul>
-
+</li>
+<li>
+<p>Network policy 非対応</p>
+</li>
+</ul>
 <h3 id="project-calico">Project Calico</h3>
-
 <ul>
 <li>Nodeごとに作られる仮想ルーターがPodのIPアドレスをiBGPで広報しあい, L3接続性を得る</li>
 <li>得られるメリット
-
 <ul>
 <li>パフォーマンス面での優位性(カプセル化しないため)</li>
 <li>物理機器との連携 (e.g. <a href="https://techblog.yahoo.co.jp/infrastructure/kubernetes_calico_networking/">CalicoによるKubernetesピュアL3ネットワーキング</a>)</li>
 <li>IPベースのアクセス制御がしやすい</li>
-</ul></li>
+</ul>
+</li>
 <li>Network policy 対応</li>
 </ul>
-
 <h3 id="multus">Multus</h3>
-
 <ul>
 <li>Container(netns)内に複数のI/Fを作るためのplugin</li>
 <li>設定に基づいて他のCNI pluginを呼び出すCNI plugin</li>
@@ -478,9 +446,7 @@ nodeからはFlunnelの仮想I/Fを通じてL2接続しているように見え�
 Podごとに指定したネットワークに接続できるようになる</li>
 <li>(Network Function Virtualization方面からの需要？)</li>
 </ul>
-
 <h2 id="参考にした情報源まとめ">参考にした情報源まとめ</h2>
-
 <ul>
 <li><a href="https://github.com/containernetworking/cni">containernetworking/cni</a>: CNIのGitHub rpository</li>
 <li><a href="https://qiita.com/yuanying/items/68b2a32b4d217e679955">CNI プラグインを手作業で利用する</a></li>

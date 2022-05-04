@@ -3,7 +3,7 @@
 	<head>
 		<meta charset="utf-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<meta name="generator" content="Hugo 0.53" />
+		<meta name="generator" content="Hugo 0.98.0" />
 		<title>CNIプラグインを活用してKubernetesのPodをVLANにつなぐ - ntoofu</title>
 
 		<meta name="description" content="この記事は富士通クラウドテクノロジーズ Advent Calendar 2020の21日目の記事です。
@@ -83,240 +83,211 @@ bridge CNI plugin 標準的なCNIプラグインとして https://github.com/con
 </hgroup>
 <hr class="sep" />
 </header>
-	
-
-<p>この記事は<a href="https://qiita.com/advent-calendar/2020/fjct">富士通クラウドテクノロジーズ Advent Calendar 2020</a>の21日目の記事です。</p>
-
-<h1 id="tl-dr">TL;DR</h1>
-
+	<p>この記事は<a href="https://qiita.com/advent-calendar/2020/fjct">富士通クラウドテクノロジーズ Advent Calendar 2020</a>の21日目の記事です。</p>
+<h1 id="tldr">TL;DR</h1>
 <ul>
 <li>KubernetesでPodを外部のVLANを利用したネットワークと接続したい場合の一つの方法を検証した</li>
 <li><a href="https://github.com/intel/multus-cni">Multus CNI</a> と <code>bridge</code> CNI pluginを活用する</li>
 <li>都度ノードを自ら設定したりする必要はなく、manifestを適切に与えるだけでPodを好きなVLANに直接(L2レベルでの疎通がある状態で)繋げられるようになる</li>
 </ul>
-
 <h1 id="背景">背景</h1>
-
 <h2 id="podをvlanに繋ぎたい動機">PodをVLANに繋ぎたい動機</h2>
-
 <p>業務ではインフラの管理を中心に担当しているが、IaaSとしてサービス提供している環境（いわばクラウドの裏側）の管理であり、クラウド上のシステムではないため、泥臭いことを沢山する必要がある。例えばDHCPサーバーを構築してホストのアドレスを管理できるようにしたり、ユーザーに提供しているサーバーインスタンスが利用するネットワーク機能（ファイアウォール、ロードバランサー、VPN等）を提供することなどがある。</p>
-
 <p>それら必要なものには仮想マシンとしてデプロイしているものも多くあるが、自動でダウンタイムなく安全に更新できるような構成を取れていないものも残っており、管理上負担になっている。コンポーネントによって手順も異なるため、手がかかっている。</p>
-
 <p>そこで、それらをKubernetesの上に立て直すことで、デプロイメントやアップデートの方法を共通化し、リリースサイクルを高速化していくことが出来ないかを考えている。</p>
-
 <p>しかし、KubernetesではPodのネットワークにはある程度の制約があるため、先に例に上げたようなある種の泥臭いことをKubernetes上でやろうとすると、一筋縄ではいかない。何も考えずにクラスタを構築すれば、PodはFlannelによって作られるオーバーレイネットワークのみに接続していて、DHCPによるアドレス払い出しを行うことも、ネットワーク間のパケット転送に関わることもできない。</p>
-
 <p>そこで、今回はまずIEEE 802.1QのVLANに自由にちょっかいを掛けられるようにする検証をしてみた。</p>
-
 <h2 id="cniプラグイン">CNIプラグイン</h2>
-
 <p>コンテナはランタイムの乱立と標準化の中で、コンテナ（より厳密にはLinux network namespace）のネットワークへの接続の実装を柔軟に取り回せるよう、インターフェイスとして<a href="https://github.com/containernetworking/cni">Container Network Interface</a>が定められている。そして、そのインターフェイスに準拠して作られた実装がCNIプラグインである。（CNIについての詳細は<a href="https://ntoofu.github.io/blog/post/container-network-interface/">過去にも調べて軽くまとめている</a>。）</p>
-
 <p>KubernetesもこのCNIに対応していて、適切に設定することでPodネットワークの実装を切り替えたり出来る。（このあたりはクラスタ構築をする際に設定が必要なため、クラスタ構築をしたことがあれば心当たりがあると思う。）</p>
-
 <p>今回はCNIプラグインとして以下で説明するMultus CNIとbridgeプラグインを使うことで、目的を果たせることを検証していく。</p>
-
 <h3 id="multus-cni">Multus CNI</h3>
-
 <p>これも<a href="https://ntoofu.github.io/blog/post/try-multus-cni/">過去に少し調べて書いている</a>が、簡単に言えば複数のCNIプラグインを呼び出せるようにするためのCNIプラグインで、コンテナ（Kubernetes的にはPod）の中に複数のネットワークインターフェイスを与えることなどが可能になる。</p>
-
 <h3 id="bridge-cni-plugin">bridge CNI plugin</h3>
-
 <p>標準的なCNIプラグインとして <a href="https://github.com/containernetworking/">https://github.com/containernetworking/</a> の下で<a href="https://github.com/containernetworking/plugins/blob/master/plugins/main/bridge/">提供</a>されている。主なところとしては</p>
-
 <ul>
 <li>Linux bridge interfaceを（無ければ）ホストに作成する</li>
 <li>コンテナが利用するnetns(network namespace)内と、ホストを結ぶLinux veth interfaceを作成する</li>
 <li>（必要に応じて）IPアドレスをnetns内のインターフェイスに割り当てる</li>
 <li>設定によってはこのbridgeを介して外部にSNAT(Masquerade)でIPによる通信が出来るようホストを設定する</li>
 </ul>
-
 <p>といったものになっている。直接使うことはあまりないかもしれないが、実は今なにも考えずにflannelを利用すれば(<a href="https://github.com/coreos/flannel/blob/4b015d01fe2db9988f2d3f2d451553fcfcca490a/Documentation/kube-flannel.yml">これ</a>を使ってインストールした場合)<a href="https://github.com/containernetworking/plugins/blob/e13bab99e54b4a34375450518d7db7a3da825e44/plugins/meta/flannel/flannel_linux.go#L59">内部的にbridgeプラグインを呼び出し</a>ている。</p>
-
 <p>更にこのbridgeプラグインは、Linux bridge interfaceの <a href="https://developers.redhat.com/blog/2017/09/14/vlan-filter-support-on-bridge/">vlan_filtering</a> 利用できるようになっている。余談だが、<a href="https://github.com/containernetworking/plugins/pull/231">このPR</a>で実装されたようなので、以前検証した時にはなく、今回自分でプラグインを作成または拡張しようとして、参考にソースコードを読み込んでいて気がついた。</p>
-
 <p>これを上手く使えば、必要なネットワークの定義などをほとんどKubernetesのmanifestに完結させて行うことが出来るはずなので、それを確認していく。</p>
-
 <h3 id="他のプラグイン">他のプラグイン</h3>
-
 <p><a href="https://github.com/containernetworking/plugins/">https://github.com/containernetworking/plugins/</a> の中には、他にもプラグインがあるのでそれについても少し言及しておく。</p>
-
 <ul>
 <li>vlan: 今回とかなり近いことが可能だが、VLAN IDごとにvlan typeの仮想インターフェイスを作成し、それをコンテナ(厳密にはnetwork namespace)に直接渡してしまう。そのため、同一Node上で複数のPodが同一VLAN IDを利用できない。</li>
 <li>ipvlan, macvlan: どちらもvlanと名前に含まれているが、Linuxにおけるipvlan, macvlanタイプの仮想インターフェイスのことを指しており、IEEE 802.1QのVLAN tagを付け外しすることはない。</li>
 </ul>
-
 <h1 id="検証">検証</h1>
-
 <h2 id="テスト用ネットワークの準備">テスト用ネットワークの準備</h2>
-
 <ul>
-<li><p>ノード対してNICを追加し、untagされていないフレームを転送するよう(トランクポートとなるよう)スイッチを設定</p>
-
+<li>ノード対してNICを追加し、untagされていないフレームを転送するよう(トランクポートとなるよう)スイッチを設定
 <ul>
-<li><p>画像はテスト環境に利用していたVMware vSphereのUIからのスクリーンショット</p>
-
-<p><img src="https://ntoofu.github.io/blog/images/k8s-vlan-vswitch.png" alt="" /></p></li>
-
-<li><p><code>admin-md-...</code> が kubernetesのノードで、testvmがkubernetes外部のホストであり、特定のVLANを利用しているもの（疎通の確認に利用する）</p></li>
-
-<li><p>画像にはないが、kubernetesのノードには通常の通信で利用するインターフェイスが付いている</p></li>
-</ul></li>
-
-<li><p>（以降の例の中では、<code>trunk0</code> という名前で追加されたNICが認識されたとする）</p></li>
-
-<li><p>仮想スイッチなどを利用する場合は、設定を要確認</p>
-
+<li>
+<p>画像はテスト環境に利用していたVMware vSphereのUIからのスクリーンショット</p>
+<p><img src="https://ntoofu.github.io/blog/images/k8s-vlan-vswitch.png" alt=""></p>
+</li>
+<li>
+<p><code>admin-md-...</code> が kubernetesのノードで、testvmがkubernetes外部のホストであり、特定のVLANを利用しているもの（疎通の確認に利用する）</p>
+</li>
+<li>
+<p>画像にはないが、kubernetesのノードには通常の通信で利用するインターフェイスが付いている</p>
+</li>
+</ul>
+</li>
+<li>（以降の例の中では、<code>trunk0</code> という名前で追加されたNICが認識されたとする）</li>
+<li>仮想スイッチなどを利用する場合は、設定を要確認
 <ul>
 <li>vSphereの場合、vNICに割り当てたMACアドレス以外のものを利用して通信することになるため、promiscuousとforged transmitを許可する必要がある</li>
-</ul></li>
 </ul>
-
+</li>
+</ul>
 <h2 id="ノードの準備">ノードの準備</h2>
-
 <ul>
-<li><p>接続用のbridgeを事前に作っておく</p>
-
+<li>接続用のbridgeを事前に作っておく
 <ul>
-<li>CNIプラグインが作成してくれるが、物理インターフェイスをbridgeに参加させてくれないので、事前にやっておく</li>
-
-<li><p>各ノードで以下を実行しておく</p>
-<div class="highlight"><pre class="chroma"><code class="language-shell" data-lang="shell">ip link add vlanbr0 <span class="nb">type</span> bridge vlan_filtering <span class="m">1</span>  <span class="c1"># vlanbr0というbridgeをvlan_filtering有効で作成</span>
-ip link <span class="nb">set</span> dev trunk0 master vlanbr0  <span class="c1"># 物理インターフェイスtrunk0とbridge vlanbr0を接続</span>
-bridge vlan add dev trunk0 vid <span class="m">1</span>-4094  <span class="c1"># 物理インターフェイスtrunk0で任意のtag付きフレームを受け取るように</span></code></pre></div>
-<ul>
+<li>
+<p>CNIプラグインが作成してくれるが、物理インターフェイスをbridgeに参加させてくれないので、事前にやっておく</p>
+</li>
+<li>
+<p>各ノードで以下を実行しておく</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-shell" data-lang="shell"><span class="line"><span class="cl">ip link add vlanbr0 <span class="nb">type</span> bridge vlan_filtering <span class="m">1</span>  <span class="c1"># vlanbr0というbridgeをvlan_filtering有効で作成</span>
+</span></span><span class="line"><span class="cl">ip link <span class="nb">set</span> dev trunk0 master vlanbr0  <span class="c1"># 物理インターフェイスtrunk0とbridge vlanbr0を接続</span>
+</span></span><span class="line"><span class="cl">bridge vlan add dev trunk0 vid 1-4094  <span class="c1"># 物理インターフェイスtrunk0で任意のtag付きフレームを受け取るように</span>
+</span></span></code></pre></div><ul>
 <li>Cluster APIで構築していたので、 <code>cluster.yaml</code> の <code>KubeadmConfigTemplate</code> の <code>.spec.template.spec.preKubeadmCommands</code> あたりで実行するようにしたが問題はなかった</li>
 <li>いずれにせよVLANに接続したいPodを配置しうるノード全てで事前実行が必要なので、自動でできるようにしておくべきだろう</li>
-</ul></li>
-</ul></li>
-
-<li><p>必要なCNIプラグインを導入しておく</p>
-
+</ul>
+</li>
+</ul>
+</li>
+<li>必要なCNIプラグインを導入しておく
 <ul>
 <li><code>/opt/cni/bin</code> 配下に配置</li>
 <li>ある程度新しい(vlanをサポートする) <code>bridge</code> プラグインが入っていること</li>
 <li>IPアドレスの割り当てもさせるのであれば、 <code>static</code> プラグインが入っていること
-
 <ul>
 <li>アドレス割り当てさせないことも可能(<a href="https://www.cni.dev/plugins/main/bridge/#example-l2-only-configuration">L2-only configuration</a>)だが、vlanのサポートよりさらに新し目のbridgeプラグインを用意しておく必要がありそう</li>
-</ul></li>
-</ul></li>
 </ul>
-
+</li>
+</ul>
+</li>
+</ul>
 <h2 id="multusの設定">Multusの設定</h2>
-
 <ul>
-<li>クラスタ自体は構築済みで、flannelが導入されている状態を仮定する</li>
-
-<li><p>Multusをインストールするために <a href="https://github.com/intel/multus-cni/blob/d4e86998253d2c0d44f3d8317887ff7c926e7756/images/multus-daemonset.yml">https://github.com/intel/multus-cni/blob/d4e86998253d2c0d44f3d8317887ff7c926e7756/images/multus-daemonset.yml</a> を apply する</p>
-<div class="highlight"><pre class="chroma"><code class="language-shell" data-lang="shell">kubectl apply -f https://raw.githubusercontent.com/intel/multus-cni/master/images/multus-daemonset.yml</code></pre></div></li>
-
-<li><p>以下のMultus用の設定を作成し、こちらもapply</p>
-<div class="highlight"><pre class="chroma"><code class="language-yaml" data-lang="yaml">apiVersion<span class="p">:</span><span class="w"> </span><span class="s2">&#34;k8s.cni.cncf.io/v1&#34;</span><span class="w">
-</span><span class="w"></span>kind<span class="p">:</span><span class="w"> </span>NetworkAttachmentDefinition<span class="w">
-</span><span class="w"></span>metadata<span class="p">:</span><span class="w">
-</span><span class="w">  </span>name<span class="p">:</span><span class="w"> </span>vlan-<span class="m">2001</span><span class="w">
-</span><span class="w"></span>spec<span class="p">:</span><span class="w">
-</span><span class="w">  </span>config<span class="p">:</span><span class="w"> </span><span class="s1">&#39;{
-</span><span class="s1">      &#34;cniVersion&#34;: &#34;0.3.1&#34;,
-</span><span class="s1">      &#34;plugins&#34;: [
-</span><span class="s1">        {
-</span><span class="s1">          &#34;type&#34;: &#34;bridge&#34;,
-</span><span class="s1">          &#34;bridge&#34;: &#34;vlanbr0&#34;,
-</span><span class="s1">          &#34;vlan&#34;: 2001,
-</span><span class="s1">          &#34;ipam&#34;: {
-</span><span class="s1">            &#34;type&#34;: &#34;static&#34;
-</span><span class="s1">          }
-</span><span class="s1">        }
-</span><span class="s1">      ]
-</span><span class="s1">    }&#39;</span><span class="w">
-</span><span class="w"></span>---<span class="w">
-</span><span class="w"></span>apiVersion<span class="p">:</span><span class="w"> </span><span class="s2">&#34;k8s.cni.cncf.io/v1&#34;</span><span class="w">
-</span><span class="w"></span>kind<span class="p">:</span><span class="w"> </span>NetworkAttachmentDefinition<span class="w">
-</span><span class="w"></span>metadata<span class="p">:</span><span class="w">
-</span><span class="w">  </span>name<span class="p">:</span><span class="w"> </span>vlan-<span class="m">2002</span><span class="w">
-</span><span class="w"></span>spec<span class="p">:</span><span class="w">
-</span><span class="w">  </span>config<span class="p">:</span><span class="w"> </span><span class="s1">&#39;{
-</span><span class="s1">      &#34;cniVersion&#34;: &#34;0.3.1&#34;,
-</span><span class="s1">      &#34;plugins&#34;: [
-</span><span class="s1">        {
-</span><span class="s1">          &#34;type&#34;: &#34;bridge&#34;,
-</span><span class="s1">          &#34;bridge&#34;: &#34;vlanbr0&#34;,
-</span><span class="s1">          &#34;vlan&#34;: 2002,
-</span><span class="s1">          &#34;ipam&#34;: {
-</span><span class="s1">            &#34;type&#34;: &#34;static&#34;
-</span><span class="s1">          }
-</span><span class="s1">        }
-</span><span class="s1">      ]
-</span><span class="s1">    }&#39;</span><span class="w">
-</span><span class="w"></span>---</code></pre></div></li>
+<li>
+<p>クラスタ自体は構築済みで、flannelが導入されている状態を仮定する</p>
+</li>
+<li>
+<p>Multusをインストールするために <a href="https://github.com/intel/multus-cni/blob/d4e86998253d2c0d44f3d8317887ff7c926e7756/images/multus-daemonset.yml">https://github.com/intel/multus-cni/blob/d4e86998253d2c0d44f3d8317887ff7c926e7756/images/multus-daemonset.yml</a> を apply する</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-shell" data-lang="shell"><span class="line"><span class="cl">kubectl apply -f https://raw.githubusercontent.com/intel/multus-cni/master/images/multus-daemonset.yml
+</span></span></code></pre></div></li>
+<li>
+<p>以下のMultus用の設定を作成し、こちらもapply</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;k8s.cni.cncf.io/v1&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l">NetworkAttachmentDefinition</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">metadata</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">vlan-2001</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">spec</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">config</span><span class="p">:</span><span class="w"> </span><span class="s1">&#39;{
+</span></span></span><span class="line"><span class="cl"><span class="s1">      &#34;cniVersion&#34;: &#34;0.3.1&#34;,
+</span></span></span><span class="line"><span class="cl"><span class="s1">      &#34;plugins&#34;: [
+</span></span></span><span class="line"><span class="cl"><span class="s1">        {
+</span></span></span><span class="line"><span class="cl"><span class="s1">          &#34;type&#34;: &#34;bridge&#34;,
+</span></span></span><span class="line"><span class="cl"><span class="s1">          &#34;bridge&#34;: &#34;vlanbr0&#34;,
+</span></span></span><span class="line"><span class="cl"><span class="s1">          &#34;vlan&#34;: 2001,
+</span></span></span><span class="line"><span class="cl"><span class="s1">          &#34;ipam&#34;: {
+</span></span></span><span class="line"><span class="cl"><span class="s1">            &#34;type&#34;: &#34;static&#34;
+</span></span></span><span class="line"><span class="cl"><span class="s1">          }
+</span></span></span><span class="line"><span class="cl"><span class="s1">        }
+</span></span></span><span class="line"><span class="cl"><span class="s1">      ]
+</span></span></span><span class="line"><span class="cl"><span class="s1">    }&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nn">---</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;k8s.cni.cncf.io/v1&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l">NetworkAttachmentDefinition</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">metadata</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">vlan-2002</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">spec</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">config</span><span class="p">:</span><span class="w"> </span><span class="s1">&#39;{
+</span></span></span><span class="line"><span class="cl"><span class="s1">      &#34;cniVersion&#34;: &#34;0.3.1&#34;,
+</span></span></span><span class="line"><span class="cl"><span class="s1">      &#34;plugins&#34;: [
+</span></span></span><span class="line"><span class="cl"><span class="s1">        {
+</span></span></span><span class="line"><span class="cl"><span class="s1">          &#34;type&#34;: &#34;bridge&#34;,
+</span></span></span><span class="line"><span class="cl"><span class="s1">          &#34;bridge&#34;: &#34;vlanbr0&#34;,
+</span></span></span><span class="line"><span class="cl"><span class="s1">          &#34;vlan&#34;: 2002,
+</span></span></span><span class="line"><span class="cl"><span class="s1">          &#34;ipam&#34;: {
+</span></span></span><span class="line"><span class="cl"><span class="s1">            &#34;type&#34;: &#34;static&#34;
+</span></span></span><span class="line"><span class="cl"><span class="s1">          }
+</span></span></span><span class="line"><span class="cl"><span class="s1">        }
+</span></span></span><span class="line"><span class="cl"><span class="s1">      ]
+</span></span></span><span class="line"><span class="cl"><span class="s1">    }&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nn">---</span><span class="w">
+</span></span></span></code></pre></div></li>
 </ul>
-
 <h2 id="テスト用podによる動作確認">テスト用Podによる動作確認</h2>
-
 <h3 id="準備">準備</h3>
-
 <ul>
-<li><p>以下のmanifestをapplyしてVLANに足を出すテスト用のpodを4つ作成</p>
-<div class="highlight"><pre class="chroma"><code class="language-yaml" data-lang="yaml">apiVersion<span class="p">:</span><span class="w"> </span>v1<span class="w">
-</span><span class="w"></span>kind<span class="p">:</span><span class="w"> </span>Pod<span class="w">
-</span><span class="w"></span>metadata<span class="p">:</span><span class="w">
-</span><span class="w">  </span>name<span class="p">:</span><span class="w"> </span>pod1a<span class="w">
-</span><span class="w">  </span>annotations<span class="p">:</span><span class="w">
-</span><span class="w">    </span>k8s.v1.cni.cncf.io/networks<span class="p">:</span><span class="w"> </span><span class="s1">&#39;[{&#34;name&#34;: &#34;vlan-2001&#34;, &#34;ips&#34;: [&#34;10.20.1.11/24&#34;]}]&#39;</span><span class="w">
-</span><span class="w"></span>spec<span class="p">:</span><span class="w">
-</span><span class="w">  </span>containers<span class="p">:</span><span class="w">
-</span><span class="w">    </span>-<span class="w"> </span>name<span class="p">:</span><span class="w"> </span>alpine<span class="w">
-</span><span class="w">      </span>image<span class="p">:</span><span class="w"> </span>alpine<span class="w">
-</span><span class="w">      </span>command<span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&#34;tail&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;-f&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;/dev/null&#34;</span><span class="p">]</span><span class="w">
-</span><span class="w"></span>---<span class="w">
-</span><span class="w"></span>apiVersion<span class="p">:</span><span class="w"> </span>v1<span class="w">
-</span><span class="w"></span>kind<span class="p">:</span><span class="w"> </span>Pod<span class="w">
-</span><span class="w"></span>metadata<span class="p">:</span><span class="w">
-</span><span class="w">  </span>name<span class="p">:</span><span class="w"> </span>pod1b<span class="w">
-</span><span class="w">  </span>annotations<span class="p">:</span><span class="w">
-</span><span class="w">    </span>k8s.v1.cni.cncf.io/networks<span class="p">:</span><span class="w"> </span><span class="s1">&#39;[{&#34;name&#34;: &#34;vlan-2001&#34;, &#34;ips&#34;: [&#34;10.20.1.12/24&#34;]}]&#39;</span><span class="w">
-</span><span class="w"></span>spec<span class="p">:</span><span class="w">
-</span><span class="w">  </span>containers<span class="p">:</span><span class="w">
-</span><span class="w">    </span>-<span class="w"> </span>name<span class="p">:</span><span class="w"> </span>alpine<span class="w">
-</span><span class="w">      </span>image<span class="p">:</span><span class="w"> </span>alpine<span class="w">
-</span><span class="w">      </span>command<span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&#34;tail&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;-f&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;/dev/null&#34;</span><span class="p">]</span><span class="w">
-</span><span class="w"></span>---<span class="w">
-</span><span class="w"></span>apiVersion<span class="p">:</span><span class="w"> </span>v1<span class="w">
-</span><span class="w"></span>kind<span class="p">:</span><span class="w"> </span>Pod<span class="w">
-</span><span class="w"></span>metadata<span class="p">:</span><span class="w">
-</span><span class="w">  </span>name<span class="p">:</span><span class="w"> </span>pod1c<span class="w">
-</span><span class="w">  </span>annotations<span class="p">:</span><span class="w">
-</span><span class="w">    </span>k8s.v1.cni.cncf.io/networks<span class="p">:</span><span class="w"> </span><span class="s1">&#39;[{&#34;name&#34;: &#34;vlan-2001&#34;, &#34;ips&#34;: [&#34;10.20.1.13/24&#34;]}]&#39;</span><span class="w">
-</span><span class="w"></span>spec<span class="p">:</span><span class="w">
-</span><span class="w">  </span>containers<span class="p">:</span><span class="w">
-</span><span class="w">    </span>-<span class="w"> </span>name<span class="p">:</span><span class="w"> </span>alpine<span class="w">
-</span><span class="w">      </span>image<span class="p">:</span><span class="w"> </span>alpine<span class="w">
-</span><span class="w">      </span>command<span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&#34;tail&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;-f&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;/dev/null&#34;</span><span class="p">]</span><span class="w">
-</span><span class="w"></span>---<span class="w">
-</span><span class="w"></span>apiVersion<span class="p">:</span><span class="w"> </span>v1<span class="w">
-</span><span class="w"></span>kind<span class="p">:</span><span class="w"> </span>Pod<span class="w">
-</span><span class="w"></span>metadata<span class="p">:</span><span class="w">
-</span><span class="w">  </span>name<span class="p">:</span><span class="w"> </span>pod2<span class="w">
-</span><span class="w">  </span>annotations<span class="p">:</span><span class="w">
-</span><span class="w">    </span>k8s.v1.cni.cncf.io/networks<span class="p">:</span><span class="w"> </span><span class="s1">&#39;[{&#34;name&#34;: &#34;vlan-2002&#34;, &#34;ips&#34;: [&#34;10.20.2.11/24&#34;]}]&#39;</span><span class="w">
-</span><span class="w"></span>spec<span class="p">:</span><span class="w">
-</span><span class="w">  </span>containers<span class="p">:</span><span class="w">
-</span><span class="w">    </span>-<span class="w"> </span>name<span class="p">:</span><span class="w"> </span>alpine<span class="w">
-</span><span class="w">      </span>image<span class="p">:</span><span class="w"> </span>alpine<span class="w">
-</span><span class="w">      </span>command<span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&#34;tail&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;-f&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;/dev/null&#34;</span><span class="p">]</span></code></pre></div>
-<ul>
+<li>
+<p>以下のmanifestをapplyしてVLANに足を出すテスト用のpodを4つ作成</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-yaml" data-lang="yaml"><span class="line"><span class="cl"><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l">v1</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l">Pod</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">metadata</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">pod1a</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">annotations</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">k8s.v1.cni.cncf.io/networks</span><span class="p">:</span><span class="w"> </span><span class="s1">&#39;[{&#34;name&#34;: &#34;vlan-2001&#34;, &#34;ips&#34;: [&#34;10.20.1.11/24&#34;]}]&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">spec</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">containers</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">alpine</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l">alpine</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&#34;tail&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;-f&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;/dev/null&#34;</span><span class="p">]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nn">---</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l">v1</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l">Pod</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">metadata</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">pod1b</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">annotations</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">k8s.v1.cni.cncf.io/networks</span><span class="p">:</span><span class="w"> </span><span class="s1">&#39;[{&#34;name&#34;: &#34;vlan-2001&#34;, &#34;ips&#34;: [&#34;10.20.1.12/24&#34;]}]&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">spec</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">containers</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">alpine</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l">alpine</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&#34;tail&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;-f&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;/dev/null&#34;</span><span class="p">]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nn">---</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l">v1</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l">Pod</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">metadata</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">pod1c</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">annotations</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">k8s.v1.cni.cncf.io/networks</span><span class="p">:</span><span class="w"> </span><span class="s1">&#39;[{&#34;name&#34;: &#34;vlan-2001&#34;, &#34;ips&#34;: [&#34;10.20.1.13/24&#34;]}]&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">spec</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">containers</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">alpine</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l">alpine</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&#34;tail&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;-f&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;/dev/null&#34;</span><span class="p">]</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nn">---</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l">v1</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l">Pod</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">metadata</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">pod2</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">annotations</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nt">k8s.v1.cni.cncf.io/networks</span><span class="p">:</span><span class="w"> </span><span class="s1">&#39;[{&#34;name&#34;: &#34;vlan-2002&#34;, &#34;ips&#34;: [&#34;10.20.2.11/24&#34;]}]&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nt">spec</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">containers</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">alpine</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l">alpine</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&#34;tail&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;-f&#34;</span><span class="p">,</span><span class="w"> </span><span class="s2">&#34;/dev/null&#34;</span><span class="p">]</span><span class="w">
+</span></span></span></code></pre></div><ul>
 <li><code>k8s.v1.cni.cncf.io/networks</code> のannotationが肝</li>
-</ul></li>
 </ul>
-
+</li>
+</ul>
 <h3 id="確認">確認</h3>
-
 <ul>
-<li><p>podの配置を確認</p>
-
-<pre><code>$ kubectl get pod -o wide
+<li>
+<p>podの配置を確認</p>
+<pre tabindex="0"><code>$ kubectl get pod -o wide
 NAME    READY   STATUS    RESTARTS   AGE   IP         NODE                          NOMINATED NODE   READINESS GATES
 pod1a   1/1     Running   0          10s   10.9.3.8   admin-md-0-5644c5f488-lz9sh   &lt;none&gt;           &lt;none&gt;
 pod1b   1/1     Running   0          10s   10.9.2.7   admin-md-0-5644c5f488-t6qzp   &lt;none&gt;           &lt;none&gt;
@@ -324,17 +295,13 @@ pod1c   1/1     Running   0          10s   10.9.2.8   admin-md-0-5644c5f488-t6qz
 pod2    1/1     Running   0          10s   10.9.3.9   admin-md-0-5644c5f488-lz9sh   &lt;none&gt;           &lt;none&gt;
 </code></pre></li>
 </ul>
-
 <p>つまり、以下のような状態になっている。</p>
-
-<p><img src="https://ntoofu.github.io/blog/images/k8s-vlan-node-topology.svg" alt="" /></p>
-
+<p><img src="https://ntoofu.github.io/blog/images/k8s-vlan-node-topology.svg" alt=""></p>
 <p>(二重線の箇所はタグ付きのフレームがやり取りされるイメージ)</p>
-
 <ul>
-<li><p>インターフェイスを確認</p>
-
-<pre><code>$ kubectl exec -it pod1a -- ip a
+<li>
+<p>インターフェイスを確認</p>
+<pre tabindex="0"><code>$ kubectl exec -it pod1a -- ip a
 1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
     link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
     inet 127.0.0.1/8 scope host lo
@@ -353,19 +320,17 @@ pod2    1/1     Running   0          10s   10.9.3.9   admin-md-0-5644c5f488-lz9s
        valid_lft forever preferred_lft forever
     inet6 fe80::a0a1:3ff:fed8:90bb/64 scope link
        valid_lft forever preferred_lft forever
-</code></pre>
-
-<ul>
+</code></pre><ul>
 <li><code>net1</code> というのが出来ていてIPアドレスも指定したものが付いている
-
 <ul>
 <li><code>eth0</code> の方はpod network用でflannel経由になる</li>
-</ul></li>
-</ul></li>
-
-<li><p>arpingによる外部との疎通テスト</p>
-
-<pre><code>$ kubectl exec -it pod1a -- arping -I net1 -c 1 10.20.1.1
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p>arpingによる外部との疎通テスト</p>
+<pre tabindex="0"><code>$ kubectl exec -it pod1a -- arping -I net1 -c 1 10.20.1.1
 ARPING 10.20.1.1 from 10.20.1.11 net1
 Unicast reply from 10.20.1.1 [00:50:56:8f:6e:6e] 0.386ms
 Sent 1 probe(s) (0 broadcast(s))
@@ -394,21 +359,19 @@ ARPING 10.20.1.1 from 10.20.2.11 net1
 Sent 1 probe(s) (0 broadcast(s))
 Received 0 response(s) (0 request(s), 0 broadcast(s))
 command terminated with exit code 1
-</code></pre>
-
-<ul>
+</code></pre><ul>
 <li><code>.1</code> のアドレスはテスト用の仮想マシンのもので、ちゃんと狙ったVLANと疎通できている</li>
 <li>逆に狙っていないVLAN側からの応答はなく、意図しない疎通もなさそう（一応別途テスト用仮想マシンでのパケットキャプチャもして確認済み）</li>
 <li>ARPで確認しており、L2での疎通があることが分かる
-
 <ul>
 <li><code>00:50:56</code> で始まるMACアドレスはテスト用VMのものであり、proxy ARPとかでもない</li>
-</ul></li>
-</ul></li>
-
-<li><p>arpingによるpod間疎通テスト</p>
-
-<pre><code>$ kubectl exec -it pod1b -- ip a show dev net1
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p>arpingによるpod間疎通テスト</p>
+<pre tabindex="0"><code>$ kubectl exec -it pod1b -- ip a show dev net1
 5: net1@if17: &lt;BROADCAST,MULTICAST,UP,LOWER_UP,M-DOWN&gt; mtu 1500 qdisc noqueue state UP
     link/ether 8a:ba:6d:1b:db:14 brd ff:ff:ff:ff:ff:ff
     inet 10.20.1.12/24 brd 10.20.1.255 scope global net1
@@ -427,15 +390,13 @@ ARPING 10.20.1.12 from 10.20.1.13 net1
 Unicast reply from 10.20.1.12 [8a:ba:6d:1b:db:14] 0.015ms
 Sent 1 probe(s) (0 broadcast(s))
 Received 1 response(s) (0 request(s), 0 broadcast(s))
-</code></pre>
-
-<ul>
+</code></pre><ul>
 <li>Node間、Node内いずれもPod間でARP応答を得ている</li>
-</ul></li>
-
-<li><p>ノードでの見え方</p>
-
-<pre><code>root@admin-md-0-5644c5f488-lz9sh:~# bridge vlan show
+</ul>
+</li>
+<li>
+<p>ノードでの見え方</p>
+<pre tabindex="0"><code>root@admin-md-0-5644c5f488-lz9sh:~# bridge vlan show
 port  vlan ids
 trunk0   1
          2
@@ -443,20 +404,20 @@ trunk0   1
        4093
        4094
 
-vlanbr0  1 PVID Egress Untagged
+vlanbr0	 1 PVID Egress Untagged
 
-cni0     1 PVID Egress Untagged
+cni0	 1 PVID Egress Untagged
 
-veth72b16477     1 PVID Egress Untagged
+veth72b16477	 1 PVID Egress Untagged
 
-veth6bcdbf48     1 PVID Egress Untagged
+veth6bcdbf48	 1 PVID Egress Untagged
 
-veth4bedd573     1 Egress Untagged
+veth4bedd573	 1 Egress Untagged
    2001 PVID Egress Untagged
 
-vethe2060431     1 PVID Egress Untagged
+vethe2060431	 1 PVID Egress Untagged
 
-vethe37ab17d     1 Egress Untagged
+vethe37ab17d	 1 Egress Untagged
    2002 PVID Egress Untagged
 
 root@admin-md-0-5644c5f488-lz9sh:~# tcpdump -i vlanbr0 -e -nn arp
@@ -466,15 +427,13 @@ root@admin-md-0-5644c5f488-lz9sh:~# tcpdump -i vlanbr0 -e -nn arp
 21:03:12.638448 00:50:56:8f:6e:6e &gt; a2:a1:03:d8:90:bb, ethertype 802.1Q (0x8100), length 64: vlan 2001, p 0, ethertype ARP, Reply 10.20.1.1 is-at 00:50:56:8f:6e:6e, length 46
 </code></pre></li>
 </ul>
-
 <h1 id="少し気になるがまだ調べられていないこと">少し気になるがまだ調べられていないこと</h1>
-
 <ul>
 <li>パフォーマンスについては未検証
-
 <ul>
 <li>あまり期待しないほうがよいとは思っている</li>
-</ul></li>
+</ul>
+</li>
 <li><a href="https://github.com/containernetworking/plugins/tree/master/plugins/meta/firewall">firewall</a>プラグインなどを併せて使うことはできるのか</li>
 <li>Deployment内で複数のPodなどを持つようにした場合に、VLAN接続用インターフェイスでアドレス競合しないようにする方法</li>
 </ul>

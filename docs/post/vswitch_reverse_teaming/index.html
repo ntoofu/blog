@@ -3,7 +3,7 @@
 	<head>
 		<meta charset="utf-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<meta name="generator" content="Hugo 0.53" />
+		<meta name="generator" content="Hugo 0.98.0" />
 		<title>VMware ESXi 仮想スイッチのreverse teamingについて - ntoofu</title>
 
 		<meta name="description" content="VMware ESXi の仮想スイッチの挙動に関して同僚に質問され調べたことがあったので、軽くまとめておく。
@@ -82,81 +82,50 @@ reverse teaming の影響 検証したところでは、promiscuous modeであ�
 </hgroup>
 <hr class="sep" />
 </header>
-	
-
-<p>VMware ESXi の仮想スイッチの挙動に関して同僚に質問され調べたことがあったので、軽くまとめておく。</p>
-
-<h1 id="tl-dr">TL;DR</h1>
-
+	<p>VMware ESXi の仮想スイッチの挙動に関して同僚に質問され調べたことがあったので、軽くまとめておく。</p>
+<h1 id="tldr">TL;DR</h1>
 <ul>
 <li>VMware ESXi の仮想スイッチではreverse teamingと呼ばれるフィルタが機能することがある</li>
 <li>たとえpromiscuous modeを有効にしていても機能するため、ミラーポート代わりにしたい時は注意が必要</li>
 </ul>
-
 <h1 id="前提">前提</h1>
-
 <h2 id="注意">注意</h2>
-
 <p>この記事の内容はESXi 6.7に対して確認しており、それ以外については確認していない。</p>
-
 <h2 id="nicチーミングについて">NICチーミングについて</h2>
-
 <p>詳細は<a href="https://docs.vmware.com/jp/VMware-vSphere/6.7/com.vmware.vsphere.networking.doc/GUID-4D97C749-1FFD-403D-B2AE-0CD0F1C70E2B.html">ドキュメント</a>にあるので、概要についてのみ記述する。</p>
-
 <p>仮想マシンがESXi外部と通信するために、ESXiの仮想スイッチに対してESXiホストが持つNICを割り当てる必要がある。（仮想スイッチのアップリンクと呼ばれる。）
 冗長化や負荷分散のために複数のNICをこのアップリンクとして指定することができ、これをNICチーミングという。</p>
-
 <p>イメージとしてはリンクアグリゲーションが近いし、実際に対向となるスイッチでLAGの設定をしなければならない構成もあるが、LAGを設定しないでも、NICチーミングを利用できる方法も用意されている。
 チーミングでは複数NICにどのように通信を分散させるかを規定したロードバランシングポリシーを選択でき、送信元の仮想マシン（正確には仮想スイッチのポート）ごとに利用する物理NICを決定したり、送信元MACアドレスから決定する方法などを選択した場合は、対向スイッチでLAGを設定する必要がない。
 （むしろ、設定してはいけない。）</p>
-
 <h1 id="reverse-teaming">reverse teaming</h1>
-
 <p>以前トラブルシューティング時に存在に気づいたが、あまり言及されるのをみないreverse teamingと呼ばれるらしい機能が仮想スイッチには存在している。これはどうやら前述のNICチーミングにおいてLAGを必要としないケースで動作するもののようだ。</p>
-
 <p>スイッチにLAGが設定されなければ、BUMトラフィックについてはフラッディングするため、仮想スイッチの複数のアップリンクに複製された同一のフレームが到達することとなる。したがって、宛先MACアドレスから転送先の仮想マシンを単純に決定するだけでは、複製されたフレームを仮想マシンが受け取ることとなる。それを防ぐため、上述のロードバランシングポリシーが選択されている場合は、仮想マシンがフレーム送信時に利用しているアップリンクで受け取ったパケットしか仮想マシンに転送しないようフィルタリングがなされる。これがreverse teamingと呼ばれるものである。</p>
-
 <p>送信時に利用しているアップリンクの対向ポートにて、仮想マシンのMACアドレスが学習されているはずなので、仮想マシン宛のユニキャスト通信は送信時に利用しているアップリンクで受け取ることになるという想定で、そのような作りになっているのだと思われる。</p>
-
 <p>この機能自体はよく考えられているが、細かい部分でトラブルシューティング時などに影響してくるので、気をつける必要もある。</p>
-
 <h2 id="esxiでのパケットキャプチャ時の注意">ESXiでのパケットキャプチャ時の注意</h2>
-
 <p>ESXiでは <code>pktcap-uw</code> コマンドによりパケットキャプチャが可能で、アップリンクや仮想マシンが接続される仮想スイッチのポートなどを指定してキャプチャを取得できる。
 この時、キャプチャポイントを <code>--capture</code> オプションにより指定できるが、この指定によってreverse teamingが作用した後の結果が取れるかそうでないかが変わってくるようだ。</p>
-
 <p>具体的には、 <code>--capture PortOutput</code> では、reverse teamingが働く前の結果が取得される。
 仮想スイッチのポートを指定してキャプチャした際、特にキャプチャポイントを <code>--capture</code> で指定しなかった場合は、デフォルトでこの状態になると思われる。
 明示的に <code>--capture VnicRx</code> を指定した場合は、reverse teamingを反映した結果となる。</p>
-
 <h2 id="promiscuous-mode-と-reverse-teaming">promiscuous mode と reverse teaming</h2>
-
 <h3 id="promiscuous-mode">promiscuous mode</h3>
-
 <p>通常仮想スイッチはMACアドレスの学習はしないものの、仮想マシンに割り当てているMACアドレスを元に仮想マシンを特定し、仮想スイッチが受け取ったパケットの転送を行う。（イメージとしては、MACテーブルに静的にエントリが指定されており、動的な変更がないような状態での動きに近いかもしれない。）そのため、同一ポートグループを利用していたとしても他の仮想マシンへのユニキャスト通信を受け取ることは基本的に無い。</p>
-
 <p>しかし、promiscuous mode(無差別モード)が有効な場合は、そのポートグループ内の全仮想マシンにパケットが転送される。（イメージとしては、ハブの動作に近いかもしれない。）仮想マシンがL2VPNの終端になっている場合や、再仮想化などの都合で、仮想NICに割り当てられているアドレス以外のアドレスを受け取る必要がある場合などに、よく利用される。</p>
-
 <p>ただし、ESXi6.7からは分散仮想スイッチにてMACアドレス学習させるオプションが出来ているので、必要性は薄れているかもしれない。</p>
-
 <h3 id="reverse-teaming-の影響">reverse teaming の影響</h3>
-
 <p>検証したところでは、promiscuous modeであるかどうかに関わらず、reverse teamingは同じように動作するらしい。
 しかしこの事がかえって複雑な挙動につながることがある。</p>
-
 <p>promiscuous modeでは、そのポートグループ上で仮想マシンがやり取りした通信は、同一ポートグループ上の他の仮想マシンにも見えてしまうことがある。
 同一ESXiホスト上であればポートグループ内の全仮想マシンに転送するため、それ自体は自然なことである。</p>
-
 <p>しかしもう少し詳しく見ると、他の仮想マシンの通信が見えたり見えなかったりの条件が非常に複雑であることがわかる。</p>
-
 <p>ESXiホストを跨ぐ場合はそれらを結ぶ物理スイッチの挙動にも依存するが、通常は物理スイッチ側はpromiscuous modeのような動作はしないだろうから、送信元と宛先のどちらも自身と同じホスト上の仮想マシンではないユニキャスト通信は、フラッディングされない限り基本的に見ることが出来ない。
 これは、仮想スイッチの挙動以前に物理スイッチがESXiまで転送してこないので当然の話ではある。
 同一ホスト上の仮想マシンが送信元である通信については、（promiscuous有効の同一ポートグループを利用している時）自身が宛先でなくとも転送されてくるため見ることが出来る。</p>
-
 <p>ややこしいのは、以上に当てはまらない、同一ホスト上の仮想マシンが宛先で、送信元がホスト外であるような通信についてである。
 基本的にはpromiscuous modeの動作にしたがい、通信を見ることが出来るはずなのだが、この場合もreverse teamingは健在であるため、この通信を受け取るアップリンクが自身が送信時に利用するものでないと、破棄されてしまい見ることが出来ない。
 例えばロードバランシングポリシーが送信元ポートによるものであれば、アップリンクの割り当ては仮想マシンの再起動などでも変化することがあるぐらいなので、同じホスト上の別仮想マシンへの通信は見えたり見えなかったりする…というのが実情になる。</p>
-
 <table>
 <thead>
 <tr>
@@ -165,26 +134,22 @@ reverse teaming の影響 検証したところでは、promiscuous modeであ�
 <th>見えるかどうか</th>
 </tr>
 </thead>
-
 <tbody>
 <tr>
 <td>同じホスト上の仮想マシン</td>
 <td>同じホスト上の仮想マシン</td>
 <td>見える</td>
 </tr>
-
 <tr>
 <td>同じホスト上の仮想マシン</td>
 <td>ホスト外</td>
 <td>見える</td>
 </tr>
-
 <tr>
 <td>ホスト外</td>
 <td>同じホスト上の仮想マシン</td>
 <td>アップリンクが同じ時だけ見える</td>
 </tr>
-
 <tr>
 <td>ホスト外</td>
 <td>ホスト外</td>
@@ -192,31 +157,25 @@ reverse teaming の影響 検証したところでは、promiscuous modeであ�
 </tr>
 </tbody>
 </table>
-
 <p>例えば、ある仮想マシンへの通信を別の仮想マシンでキャプチャするために、promiscuous modeが利用できるのではないかと考えた場合は、このような事情も加味しないといけないので気をつけなければならない。</p>
-
 <h1 id="検証の記録">検証の記録</h1>
-
 <h2 id="構成">構成</h2>
-
 <ul>
 <li>ESXi 6.7 (2台)</li>
 <li>標準仮想スイッチを利用
-
 <ul>
 <li>アップリンクは2つ用意</li>
 <li>ロードバランシングポリシーは送信元ポートを利用</li>
-</ul></li>
+</ul>
+</li>
 <li>それぞれのESXiホストに1台ずつテスト用仮想マシンを配置し、pingによりICMPパケットをやり取りさせておく</li>
 <li>仮想マシンに割り当てられなかった方のアップリンクについて、対向の物理スイッチのポートをミラーポートとして設定し、両アップリンクに同じフレームが流れ込むように仕向ける</li>
 </ul>
-
 <h2 id="手順と結果">手順と結果</h2>
-
 <ul>
-<li><p>アップリンクに同じようにICMPパケットが来ているか確認（同一のタイミングで取得していないので完全には一致しないが、同じ送信元と宛先で1秒間隔に受信している）</p>
-
-<pre><code>[root@esxi:~] pktcap-uw --uplink vmnic2 -c 3 --proto 0x01
+<li>
+<p>アップリンクに同じようにICMPパケットが来ているか確認（同一のタイミングで取得していないので完全には一致しないが、同じ送信元と宛先で1秒間隔に受信している）</p>
+<pre tabindex="0"><code>[root@esxi:~] pktcap-uw --uplink vmnic2 -c 3 --proto 0x01
 The name of the uplink is vmnic2
 To capture 3 packets
 The session filter IP protocol is 0x01
@@ -258,9 +217,7 @@ Destroying session 38
 
 Dumped 3 packet to console, dropped 0 packets.
 Done.
-</code></pre>
-
-<pre><code>[root@esxi:~] pktcap-uw --uplink vmnic3 -c 3 --proto 0x01
+</code></pre><pre tabindex="0"><code>[root@esxi:~] pktcap-uw --uplink vmnic3 -c 3 --proto 0x01
 The name of the uplink is vmnic3
 To capture 3 packets
 The session filter IP protocol is 0x01
@@ -303,10 +260,9 @@ Destroying session 39
 Dumped 3 packet to console, dropped 0 packets.
 Done.
 </code></pre></li>
-
-<li><p>仮想マシンの接続するポートのPortOutputを確認し、複製を確認（1秒の間をあけず同じパケットが来ている）</p>
-
-<pre><code>[root@esxi:~] pktcap-uw --switchport 50331657 --dir 1 -c 3 --proto 0x01 --capture PortOutput
+<li>
+<p>仮想マシンの接続するポートのPortOutputを確認し、複製を確認（1秒の間をあけず同じパケットが来ている）</p>
+<pre tabindex="0"><code>[root@esxi:~] pktcap-uw --switchport 50331657 --dir 1 -c 3 --proto 0x01 --capture PortOutput
 The switch port id is 0x03000009
 The dir is Output
 To capture 3 packets
@@ -351,10 +307,9 @@ Destroying session 36
 Dumped 3 packet to console, dropped 0 packets.
 Done.
 </code></pre></li>
-
-<li><p>仮想マシンの接続するポートのVnicRxを確認し、複製がないことを確認</p>
-
-<pre><code>[root@esxi:~] pktcap-uw --switchport 50331657 --dir 1 -c 3 --proto 0x01 --capture VnicRx
+<li>
+<p>仮想マシンの接続するポートのVnicRxを確認し、複製がないことを確認</p>
+<pre tabindex="0"><code>[root@esxi:~] pktcap-uw --switchport 50331657 --dir 1 -c 3 --proto 0x01 --capture VnicRx
 The switch port id is 0x03000009
 The dir is Output
 To capture 3 packets
