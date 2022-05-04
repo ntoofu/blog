@@ -3,11 +3,11 @@
 	<head>
 		<meta charset="utf-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<meta name="generator" content="Hugo 0.53" />
+		<meta name="generator" content="Hugo 0.98.0" />
 		<title>Eclipse TitanでTTCN-3を試した - ntoofu</title>
 
 		<meta name="description" content="TTCN-3について気になったので試してみた。
-TTCN-3 について TTCN-3 とは  通信関係のconformance testing (仕様や標準などに準拠しているかを調べるテストのこと) 用の言語のひとつ  テレコム系とかで使われていたりする？（推測）  プロトコル通りに動作するかを確かめたりするためのものなので, 通信のやり取りを柔軟に記述できる  対象とするレイヤ次第ではIPパケットやEthernetフレームのレベルで操作でき, 自由にヘッダを設定して送信したりできる 指定したパターンを満たすメッセージ(フレームやパケット等)を受け取ったら…という条件分岐も簡単に書ける   TTCN-3 の実行モデル  parallelなテスト実行をサポートしていて, 1つのテストで複数のホスト間のやり取りを記述することが出来る  componentと呼ばれるある種のオブジェクトとそのcomponent間のやりとりをテストに記述でき, componentをそれぞれ別のホストに割り当てて動作させることが出来る テスト用の実行ファイルを各テスト実行用ホスト(host controller)に配置して実行すると, 制御用ホスト(main controller)にTCP接続し, 制御用ホスト上に存在する設定ファイルに基づいてテストが実行され, テストの結果やログは制御用ホストに収集される   TTCN-3 でできそうなこと  ネットワーク機器やNFVなどが期待通りの動作をしているかのテスト  例えばファイアウォールを挟んだ2ホスト間で通信を行い, 期待通りにパケットを通過・遮断させるのか  あるプロトコルを実装したソフトウェアが, そのプロトコルでの特定のリクエスト等に対して期待した応答をするか  例えばDNSサーバーに適当なクエリを投げ, 期待した応答が得られるか  こちらの書籍の中では例としてそのような題材を扱っていた    Eclipse Titanについて  TTCN-3自体は標準化された言語であり, その処理系の1つとしてEclipse Titanが存在する その名の通りEclipse Foundation傘下のプロジェクト TTCN-3のファイルをEclipse Titanでコンパイル(トランスパイル?)するとC&#43;&#43;のコードになり, これをコンパイルしてテスト実行用のバイナリを得る…といった流れになる TTCN-3の書き方も含めて, 使い方については https://projects.eclipse.org/projects/tools.titan/downloads にまとめて公開されているPDFなどを参照するのが良い。  試してみた https://github.">
+TTCN-3 について TTCN-3 とは  通信関係のconformance testing (仕様や標準などに準拠しているかを調べるテストのこと) 用の言語のひとつ  テレコム系とかで使われていたりする？（推測）   プロトコル通りに動作するかを確かめたりするためのものなので, 通信のやり取りを柔軟に記述できる  対象とするレイヤ次第ではIPパケットやEthernetフレームのレベルで操作でき, 自由にヘッダを設定して送信したりできる 指定したパターンを満たすメッセージ(フレームやパケット等)を受け取ったら…という条件分岐も簡単に書ける    TTCN-3 の実行モデル  parallelなテスト実行をサポートしていて, 1つのテストで複数のホスト間のやり取りを記述することが出来る  componentと呼ばれるある種のオブジェクトとそのcomponent間のやりとりをテストに記述でき, componentをそれぞれ別のホストに割り当てて動作させることが出来る テスト用の実行ファイルを各テスト実行用ホスト(host controller)に配置して実行すると, 制御用ホスト(main controller)にTCP接続し, 制御用ホスト上に存在する設定ファイルに基づいてテストが実行され, テストの結果やログは制御用ホストに収集される    TTCN-3 でできそうなこと  ネットワーク機器やNFVなどが期待通りの動作をしているかのテスト  例えばファイアウォールを挟んだ2ホスト間で通信を行い, 期待通りにパケットを通過・遮断させるのか   あるプロトコルを実装したソフトウェアが, そのプロトコルでの特定のリクエスト等に対して期待した応答をするか  例えばDNSサーバーに適当なクエリを投げ, 期待した応答が得られるか  こちらの書籍の中では例としてそのような題材を扱っていた      Eclipse Titanについて  TTCN-3自体は標準化された言語であり, その処理系の1つとしてEclipse Titanが存在する その名の通りEclipse Foundation傘下のプロジェクト TTCN-3のファイルをEclipse Titanでコンパイル(トランスパイル?">
 
 		<meta name="google-site-verification" content="-dM2-3-X8FeQrDaA7h-n_6oJ7drfIg3AD4AjEvr6LGw" />
 
@@ -69,60 +69,49 @@ TTCN-3 について TTCN-3 とは  通信関係のconformance testing (仕様や
 </hgroup>
 <hr class="sep" />
 </header>
-	
-
-<p><a href="https://en.wikipedia.org/wiki/TTCN-3">TTCN-3</a>について気になったので試してみた。</p>
-
+	<p><a href="https://en.wikipedia.org/wiki/TTCN-3">TTCN-3</a>について気になったので試してみた。</p>
 <h1 id="ttcn-3-について">TTCN-3 について</h1>
-
 <h2 id="ttcn-3-とは">TTCN-3 とは</h2>
-
 <ul>
 <li>通信関係のconformance testing (仕様や標準などに準拠しているかを調べるテストのこと) 用の言語のひとつ
-
 <ul>
 <li>テレコム系とかで使われていたりする？（推測）</li>
-</ul></li>
+</ul>
+</li>
 <li>プロトコル通りに動作するかを確かめたりするためのものなので, 通信のやり取りを柔軟に記述できる
-
 <ul>
 <li>対象とするレイヤ次第ではIPパケットやEthernetフレームのレベルで操作でき, 自由にヘッダを設定して送信したりできる</li>
 <li>指定したパターンを満たすメッセージ(フレームやパケット等)を受け取ったら…という条件分岐も簡単に書ける</li>
-</ul></li>
 </ul>
-
+</li>
+</ul>
 <h2 id="ttcn-3-の実行モデル">TTCN-3 の実行モデル</h2>
-
 <ul>
 <li>parallelなテスト実行をサポートしていて, 1つのテストで複数のホスト間のやり取りを記述することが出来る
-
 <ul>
 <li>componentと呼ばれるある種のオブジェクトとそのcomponent間のやりとりをテストに記述でき, componentをそれぞれ別のホストに割り当てて動作させることが出来る</li>
 <li>テスト用の実行ファイルを各テスト実行用ホスト(host controller)に配置して実行すると, 制御用ホスト(main controller)にTCP接続し, 制御用ホスト上に存在する設定ファイルに基づいてテストが実行され, テストの結果やログは制御用ホストに収集される</li>
-</ul></li>
 </ul>
-
+</li>
+</ul>
 <h2 id="ttcn-3-でできそうなこと">TTCN-3 でできそうなこと</h2>
-
 <ul>
 <li>ネットワーク機器やNFVなどが期待通りの動作をしているかのテスト
-
 <ul>
 <li>例えばファイアウォールを挟んだ2ホスト間で通信を行い, 期待通りにパケットを通過・遮断させるのか</li>
-</ul></li>
+</ul>
+</li>
 <li>あるプロトコルを実装したソフトウェアが, そのプロトコルでの特定のリクエスト等に対して期待した応答をするか
-
 <ul>
 <li>例えばDNSサーバーに適当なクエリを投げ, 期待した応答が得られるか
-
 <ul>
 <li><a href="https://yakecsson.booth.pm/items/1571827">こちらの書籍</a>の中では例としてそのような題材を扱っていた</li>
-</ul></li>
-</ul></li>
 </ul>
-
+</li>
+</ul>
+</li>
+</ul>
 <h1 id="eclipse-titanについて">Eclipse Titanについて</h1>
-
 <ul>
 <li>TTCN-3自体は標準化された言語であり, その処理系の1つとしてEclipse Titanが存在する</li>
 <li>その名の通り<a href="https://www.eclipse.org/">Eclipse Foundation</a>傘下のプロジェクト</li>
@@ -130,15 +119,10 @@ TTCN-3 について TTCN-3 とは  通信関係のconformance testing (仕様や
 　
 TTCN-3の書き方も含めて, 使い方については <a href="https://projects.eclipse.org/projects/tools.titan/downloads">https://projects.eclipse.org/projects/tools.titan/downloads</a> にまとめて公開されているPDFなどを参照するのが良い。</li>
 </ul>
-
 <h1 id="試してみた">試してみた</h1>
-
 <p><a href="https://github.com/ntoofu/ttcn3-titan-experiments">https://github.com/ntoofu/ttcn3-titan-experiments</a> に試したものを置いた。以下で簡単に解説しておく。</p>
-
 <p>2つのテストを書いているが, いずれも <code>docker-compose up</code> すれば実行できるように書いている。</p>
-
-<h2 id="01-tcp-syn-response-https-github-com-ntoofu-ttcn3-titan-experiments-blob-aa681128f08536ea084342bf989844ae8ea34b81-01-tcp-syn-response-tcp-syn-response-ttcn"><a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/01-tcp_syn_response/tcp_syn_response.ttcn"><code>01-tcp_syn_response</code></a></h2>
-
+<h2 id="01-tcp_syn_responsehttpsgithubcomntoofuttcn3-titan-experimentsblobaa681128f08536ea084342bf989844ae8ea34b8101-tcp_syn_responsetcp_syn_responsettcn"><a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/01-tcp_syn_response/tcp_syn_response.ttcn"><code>01-tcp_syn_response</code></a></h2>
 <link href="https://ntoofu.github.io/blog/mermaid/mermaid.css" type="text/css" rel="stylesheet"/>
 <script defer src="https://unpkg.com/mermaid@7.1.2/dist/mermaid.js">mermaid.initialize({startOnLoad:true});</script>
 <div class="mermaid" align="left" >
@@ -154,40 +138,37 @@ graph TD
   nc -. SYN+ACK .-> MTC
 </div>
 
-
 <ul>
 <li><code>nc</code> を実行させておいたコンテナにSYNを送信し, SYN+ACKが返ってくることを確認するテスト
-
 <ul>
 <li>ここではncとしたが, 基本的にはnc(そこに至るまでの経路を含む)が正常に応答するかを確かめていることになる</li>
-</ul></li>
+</ul>
+</li>
 <li><a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/01-tcp_syn_response/tcp_syn_response.ttcn#L16-L33">testcase</a>がテストケースを記述する部分で, SYNを送信<a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/01-tcp_syn_response/tcp_syn_response.ttcn#L19">(L19)</a>した後に, 3パターンの分岐を書いている
-
 <ul>
 <li>SYN+ACKを受信するか<a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/01-tcp_syn_response/tcp_syn_response.ttcn#L22">(L22)</a> → この場合のみtestはpass</li>
 <li>それ以外の何かを受信するか<a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/01-tcp_syn_response/tcp_syn_response.ttcn#L25">(L25)</a></li>
 <li>タイムアウト<a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/01-tcp_syn_response/tcp_syn_response.ttcn#L28">(L28)</a></li>
-</ul></li>
+</ul>
+</li>
 <li>送受信するものは <code>PDU_TCP</code> のtemplateとして定義している<a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/01-tcp_syn_response/tcp_syn_response.ttcn#L35-L48">(L35-L48)</a>,<a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/01-tcp_syn_response/tcp_syn_response.ttcn#L59-L72">(L59-L72)</a>
-
 <ul>
 <li>省略の <code>omit</code> や, 任意の値を許容する <code>?</code> が使える</li>
-</ul></li>
+</ul>
+</li>
 <li>testcaseは <code>runs on MTC</code> の通り <code>MTC</code> という名のcomponent<a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/01-tcp_syn_response/tcp_syn_response.ttcn#L83-L85">(L83-L85)</a>上で動作する
-
 <ul>
 <li><code>MTC</code> には <code>TcpPort</code> というタイプの port が指定されている</li>
 <li>portを使うことで, それより下層の実装は気にせずにメッセージを送受信できる
-
 <ul>
 <li>例えば, <a href="https://github.com/eclipse/titan.TestPorts.UDPasp">UDPasp</a>を使えば, そのportにはデータグラム部のみ渡せば勝手にUDPパケットとして別途設定ファイルなどから設定したIPアドレス, ポート番号を使ってデータを送ってくれる</li>
-</ul></li>
-<li>portは通常 <a href="https://github.com/eclipse?q=titan.TestPort">https://github.com/eclipse?q=titan.TestPort</a> にあるようなものを利用できるが, ここでは適切なものがなかったため, translation portという仕組み(<a href="https://www.eclipse.org/forums/index.php/m/1799025/">参考</a>)でEthernetフレーム用のportを拡張してportを定義している</li>
-</ul></li>
 </ul>
-
-<h2 id="02-tcp-handshake-https-github-com-ntoofu-ttcn3-titan-experiments-blob-aa681128f08536ea084342bf989844ae8ea34b81-02-tcp-handshake-tcp-handshake-ttcn"><a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/02-tcp_handshake/tcp_handshake.ttcn"><code>02-tcp_handshake</code></a></h2>
-
+</li>
+<li>portは通常 <a href="https://github.com/eclipse?q=titan.TestPort">https://github.com/eclipse?q=titan.TestPort</a> にあるようなものを利用できるが, ここでは適切なものがなかったため, translation portという仕組み(<a href="https://www.eclipse.org/forums/index.php/m/1799025/">参考</a>)でEthernetフレーム用のportを拡張してportを定義している</li>
+</ul>
+</li>
+</ul>
+<h2 id="02-tcp_handshakehttpsgithubcomntoofuttcn3-titan-experimentsblobaa681128f08536ea084342bf989844ae8ea34b8102-tcp_handshaketcp_handshakettcn"><a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/02-tcp_handshake/tcp_handshake.ttcn"><code>02-tcp_handshake</code></a></h2>
 <link href="https://ntoofu.github.io/blog/mermaid/mermaid.css" type="text/css" rel="stylesheet"/>
 <script defer src="https://unpkg.com/mermaid@7.1.2/dist/mermaid.js">mermaid.initialize({startOnLoad:true});</script>
 <div class="mermaid" align="left" >
@@ -212,61 +193,55 @@ graph TD
   client -- ACK --> server
 </div>
 
-
 <ul>
 <li>host controllerの間で3way handshakeに相当する通信を行わせ, きちんとパケットがやりとり出来るかを確認
-
 <ul>
 <li>ここではコンテナで実施しているのでわかりにくいが, ptc1とptc2の間の経路をテストしており, 実際には間にファイアウォールなどが入ることをイメージしている</li>
-</ul></li>
+</ul>
+</li>
 <li>createの第二引数で,component実行するホストを指定している<a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/02-tcp_handshake/tcp_handshake.ttcn#L18-L19">(L18-L19)</a></li>
 <li>testcase自体は <code>MTC</code> 上で実施されるため, <code>client</code>, <code>server</code> での送受信のイベントを制御するためにinternal portを用意している<a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/02-tcp_handshake/tcp_handshake.ttcn#L261-L265">(L261-L265)</a>
-
 <ul>
 <li><code>MTC</code> の <code>CP1</code>, <code>CP2</code> ポートをそれぞれ <code>client</code>, <code>server</code> の <code>CP</code> portとつなぎ<a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/02-tcp_handshake/tcp_handshake.ttcn#L20-L21">(L20-L21)</a>, 同一視出来るように
-
 <ul>
 <li>もっと良い書き方があるかも…</li>
-</ul></li>
+</ul>
+</li>
 <li><code>client</code>, <code>server</code> では <code>CP</code> portと <code>Tcp_P</code> portを相互に横流し<a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/02-tcp_handshake/tcp_handshake.ttcn#L89-L106">(L89-L106)</a>, 同一視出来るように</li>
-</ul></li>
+</ul>
+</li>
 <li><code>TcpPort</code> 内部で使っているIPアドレスなどの設定値をcomponent間で変えるために, translation portにおいて設定変更用のメッセージを追加している<a href="https://github.com/ntoofu/ttcn3-titan-experiments/blob/aa681128f08536ea084342bf989844ae8ea34b81/02-tcp_handshake/tcp_handshake.ttcn#L276">(L276)</a></li>
 </ul>
-
 <h1 id="所感">所感</h1>
-
 <h2 id="良いところ">良いところ</h2>
-
 <ul>
 <li>シンプルに低いレイヤでのテストが書けるし, 複数ホストに分散させて実行できる
-
 <ul>
 <li>同等のことをpythonでfabric等を駆使してやってみたことがあるが, 滅茶苦茶面倒</li>
 <li>コード全体はそれなりの長さはあったが, componentやport関連の部分は, ちょっとtestcaseを修正・追加する場合は触らないので, 頻繁にいじる部分で言えばかなりコンパクト</li>
-</ul></li>
+</ul>
+</li>
 <li>継続して開発されてるようなので, その点は安心感がある</li>
 </ul>
-
 <h2 id="気になったところ">気になったところ</h2>
-
 <ul>
 <li>情報の入手性が悪い
-
 <ul>
 <li>日本語情報は先に紹介した同人誌以外ほとんど見かけなかった</li>
 <li>英語でも, 解説記事はあまり見かけず, 仕様書のような堅い内容のPDFファイルだったり, 解説しているスライドだったり</li>
 <li>ただ, Eclipseのフォーラムが参考になったりはするし, 一度質問してみたら親切に回答して下さる方がいて助かった
-
 <ul>
 <li>アカウント作ってEclipseのContribution Agreementに同意したりと手間ではある…</li>
-</ul></li>
-</ul></li>
+</ul>
+</li>
+</ul>
+</li>
 <li>仕方ないことだが, 学習コストはそこそこかかりそうな印象がある
-
 <ul>
 <li>独特な概念がある</li>
 <li>情報の入手性の悪さも影響している</li>
-</ul></li>
+</ul>
+</li>
 </ul>
 
 </article>

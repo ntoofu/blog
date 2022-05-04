@@ -3,7 +3,7 @@
 	<head>
 		<meta charset="utf-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<meta name="generator" content="Hugo 0.53" />
+		<meta name="generator" content="Hugo 0.98.0" />
 		<title>git-annex によるファイル管理を試した - ntoofu</title>
 
 		<meta name="description" content="About the page">
@@ -71,102 +71,93 @@
 </hgroup>
 <hr class="sep" />
 </header>
-	
-
-<p><a href="https://lwn.net/Articles/774125/">LWN.netの記事</a> で
+	<p><a href="https://lwn.net/Articles/774125/">LWN.netの記事</a> で
 <a href="https://git-annex.branchable.com/">git-annex</a> について知ったのでちょっと試してみた。</p>
-
 <h2 id="git-annex">git-annex</h2>
-
 <ul>
 <li>LWN.netの記事もそうであるように, Gitで巨大なファイルを管理する際に
 <a href="https://git-lfs.github.com/">git-lfs</a>と並んで名前があがることがある</li>
 <li>大きなファイルに限らず, ファイルの実体とバージョン管理を分離することができる</li>
 <li>ユースケースについては <a href="https://git-annex.branchable.com/">git-annex</a> の説明を
 読むのがわかり易い
-
 <ul>
 <li>例1: バックアップ・アーカイブ用途</li>
 <li>例2: キャッシュ的な用途（クラウドストレージにあるデータをリムーバブルメディアに持ってきて
 利用した後, 書き戻す）</li>
-</ul></li>
+</ul>
+</li>
 <li>柔軟な制御は出来る反面面倒な部分が多い
-
 <ul>
 <li>実体の置き場を複数に分散させられるので, 分散ストレージもどきっぽくできる
-
 <ul>
 <li>置き場にはクラウドストレージ等も利用可能</li>
-</ul></li>
+</ul>
+</li>
 <li>保持しておくべき実体のコピーの数とかも指定できる（バックアップ用途に便利）</li>
 <li>実体が手元にあるかないか気にする必要があるが, 裏を返せば実体は必要なものだけ持つこともできる</li>
 <li>バージョン管理はgitの流儀に従って都度自分で行うか自動でやる仕組みを整える必要がある
-
 <ul>
 <li>cronジョブを仕込むとか</li>
-</ul></li>
-</ul></li>
+</ul>
+</li>
+</ul>
+</li>
 <li>ホスティングサービスの対応は薄い
-
 <ul>
 <li><a href="https://gitlab.com/gitlab-org/gitlab-ee/issues/1648">GitLabでは対応を打ち切られている</a></li>
-</ul></li>
+</ul>
+</li>
 <li>ちなみに haskell で書かれている模様</li>
 </ul>
-
 <h2 id="検証のモチベーション">検証のモチベーション</h2>
-
 <ul>
 <li>デスクトップ, ラップトップ, モバイルのデータ共有に使えないか</li>
 <li>以下のような運用を実現したい
-
 <ul>
 <li>デスクトップは常にアクセスできるNFS上のデータにアクセスするようにしておきたい</li>
 <li>NFS上のデータは適宜クラウドストレージ(Google Drive)にバックアップとしてデータをコピーしておきたい</li>
 <li>ラップトップは自宅ではNFSのデータを使いつつ, 外出先ではローカルのデータを使い,
 もしローカルに無い場合はクラウドストレージからデータを持ってくるようにする
-
 <ul>
 <li>ローカルの容量が小さいので, 必要なデータだけを持ってきたい</li>
-</ul></li>
+</ul>
+</li>
 <li>モバイル(iOS)から参照が必要なものは都度クラウドストレージから読み出しつつ,
 撮った写真とかはクラウドストレージにアップロードする</li>
-</ul></li>
+</ul>
+</li>
 <li><a href="https://github.com/prasmussen/gdrive">gdrive</a>などでrsyncライクに同期を取ることはやっていたが,
 気になる部分があってやめていた
-
 <ul>
 <li>同期忘れで並行して変更が発生してしまい不整合が出たら嫌</li>
 <li>NFSを使っている関係で書き換え発生時に自動的に同期することが出来ない</li>
-</ul></li>
 </ul>
-
+</li>
+</ul>
 <h2 id="試してわかったこと">試してわかったこと</h2>
-
 <p>公式に<a href="https://git-annex.branchable.com/walkthrough/">walkthrough</a>があるので,
 参考にして色々試しつつ動きを確認した。</p>
-
 <ul>
 <li>git-annex version: 7.20181211</li>
 </ul>
-
 <ol>
-<li>インストール
-
+<li>インストール</li>
+</ol>
 <ul>
 <li>Gentooでは <a href="git://github.com/gentoo-haskell/gentoo-haskell.git">haskell</a> リポジトリにある
-
 <ul>
 <li>(余談) xmonad も同様のため自分の環境ではすんなり入れられた</li>
-</ul></li>
-</ul></li>
-
-<li><p>annexを使う準備として, 対象になるGitのworking tree内で <code>git annex init</code></p>
-
+</ul>
+</li>
+</ul>
+<ol start="2">
+<li>annexを使う準備として, 対象になるGitのworking tree内で <code>git annex init</code></li>
+</ol>
 <ul>
-<li><p><code>.git/annex</code> ディレクトリが作られる</p>
-
-<pre><code>$ ls -ln .git
+<li>
+<p><code>.git/annex</code> ディレクトリが作られる</p>
+<pre><code>```
+$ ls -ln .git
 合計 12
 -rw-r--r-- 1 1000 1000  23  1月  6 05:45 HEAD
 drwxr-xr-x 4 1000 1000 180  1月  6 05:45 annex
@@ -177,20 +168,22 @@ drwxr-xr-x 2 1000 1000  60  1月  6 05:39 info
 drwxr-xr-x 3 1000 1000  60  1月  6 05:45 logs
 drwxr-xr-x 9 1000 1000 180  1月  6 05:45 objects
 drwxr-xr-x 4 1000 1000  80  1月  6 05:39 refs
-</code></pre></li>
-
-<li><p>自分ではまだ何もcommitしていないが, <code>git annex init</code> により勝手に commit が作られている
+```
+</code></pre>
+</li>
+<li>
+<p>自分ではまだ何もcommitしていないが, <code>git annex init</code> により勝手に commit が作られている
 (masterブランチなどとは独立した木を作る <code>git-annex</code> ブランチ)</p>
-
-<pre><code>$ git log --all --oneline --decorate --graph
-* c61da85 (git-annex) update
-* 75768be branch created
-</code></pre></li>
-
-<li><p><code>git-annex</code> ブランチ上では <code>uuid.log</code> にファイルの実体置き場としてのgit-annex repositoryの
+<pre><code>    $ git log --all --oneline --decorate --graph
+    * c61da85 (git-annex) update
+    * 75768be branch created
+</code></pre>
+</li>
+<li>
+<p><code>git-annex</code> ブランチ上では <code>uuid.log</code> にファイルの実体置き場としてのgit-annex repositoryの
 情報が追記される</p>
-
-<pre><code>$ git show c61da85
+<pre><code>```
+$ git show c61da85
 commit c61da85e7c2875610309b919b3c3d6a13f9cf0fc
 Author: ntoofu &lt;ntoofu@users.noreply.github.com&gt;
 Date:   Sun Jan 6 06:12:37 2019 +0900
@@ -204,16 +197,19 @@ index 0000000..280627a
 +++ b/uuid.log
 @@ -0,0 +1 @@
 +973e8872-e107-406e-89a1-14a375cbf631 qwert@isokaze:/tmp/annex timestamp=1546722757.613959057s
-</code></pre></li>
-</ul></li>
-
-<li><p><code>git annex add</code> でファイルをannexによる管理として追加できる</p>
-
+```
+</code></pre>
+</li>
+</ul>
+<ol start="3">
+<li><code>git annex add</code> でファイルをannexによる管理として追加できる</li>
+</ol>
 <ul>
-<li><p>working tree及びgitとしてはsymlinkとして扱い,
+<li>
+<p>working tree及びgitとしてはsymlinkとして扱い,
 実体は <code>.git/annex/objects</code> 配下にhash値と共に置かれる</p>
-
-<pre><code>$ ls -ln
+<pre><code>```
+$ ls -ln
 合計 4
 -rw-r--r-- 1 1000 1000 9  1月  6 06:23 hoge
 $ git annex add hoge
@@ -222,9 +218,9 @@ add hoge ok
 $ ls -ln
 合計 4
 lrwxrwxrwx 1 1000 1000 178  1月  6 06:23 hoge -&gt; .git/annex/objects/Xf/zv/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1
-</code></pre>
-
-<pre><code>$ git diff --cached | cat
+```
+```
+$ git diff --cached | cat
 diff --git a/hoge b/hoge
 new file mode 120000
 index 0000000..2b49184
@@ -233,51 +229,52 @@ index 0000000..2b49184
 @@ -0,0 +1 @@
 +.git/annex/objects/Xf/zv/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1
 \ No newline at end of file
+```
 </code></pre>
-
 <ul>
 <li>(最後の<code>git diff</code>では, file modeからsymlinkとわかる)</li>
-</ul></li>
+</ul>
+</li>
+<li>
+<p><code>git-annex</code> ブランチにもcommitが作成される</p>
+<pre><code>    $ git log --all --oneline --decorate --graph
+    * d60672a (git-annex) update
+    * c61da85 update
+    * 75768be branch created
+    $ git show d60672a
+    commit d60672a4ee4d1e36bc0dd3be90889a18f94f80ac
+    Author: ntoofu &lt;ntoofu@users.noreply.github.com&gt;
+    Date:   Sun Jan 6 06:23:52 2019 +0900
 
-<li><p><code>git-annex</code> ブランチにもcommitが作成される</p>
+        update
 
-<pre><code>$ git log --all --oneline --decorate --graph
-* d60672a (git-annex) update
-* c61da85 update
-* 75768be branch created
-$ git show d60672a
-commit d60672a4ee4d1e36bc0dd3be90889a18f94f80ac
-Author: ntoofu &lt;ntoofu@users.noreply.github.com&gt;
-Date:   Sun Jan 6 06:23:52 2019 +0900
-
-    update
-
-diff --git a/140/6ab/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1.log b/140/6ab/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1.log
-new file mode 100644
-index 0000000..6ea53ba
---- /dev/null
-+++ b/140/6ab/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1.log
-@@ -0,0 +1 @@
-+1546723432.699459191s 1 973e8872-e107-406e-89a1-14a375cbf631
+    diff --git a/140/6ab/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1.log b/140/6ab/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1.log
+    new file mode 100644
+    index 0000000..6ea53ba
+    --- /dev/null
+    +++ b/140/6ab/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1.log
+    @@ -0,0 +1 @@
+    +1546723432.699459191s 1 973e8872-e107-406e-89a1-14a375cbf631
 </code></pre>
-
 <ul>
 <li>ファイル実体を示すハッシュに紐づけて <code>.log</code> ファイルとして git-annex repository の情報を持つ</li>
-</ul></li>
-</ul></li>
-
-<li><p>git commit や git mv は普通に実施してよい</p>
-
+</ul>
+</li>
+</ul>
+<ol start="4">
+<li>git commit や git mv は普通に実施してよい</li>
+</ol>
 <ul>
 <li>git的にはsymlinkの情報を管理するだけなので, ファイル実体に関わらない操作は通常通り</li>
-</ul></li>
-
-<li><p>repositoryの追加は git repository として追加すれば良い</p>
-
+</ul>
+<ol start="5">
+<li>repositoryの追加は git repository として追加すれば良い</li>
+</ol>
 <ul>
-<li><p>git cloneなどでgit repositoryを複製できるが無効なsymlinkがあるのみ</p>
-
-<pre><code>$ git clone /tmp/annex/ annex-clone
+<li>
+<p>git cloneなどでgit repositoryを複製できるが無効なsymlinkがあるのみ</p>
+<pre><code>```
+$ git clone /tmp/annex/ annex-clone
 Cloning into 'annex-clone'...
 done.
 $ cd annex-clone
@@ -286,11 +283,13 @@ $ ls -ln
 lrwxrwxrwx 1 1000 1000 178  1月  6 06:38 hoge -&gt; .git/annex/objects/Xf/zv/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1
 $ cat hoge
 cat: hoge: そのようなファイルやディレクトリはありません
-</code></pre></li>
-
-<li><p><code>git annex init</code> で説明を変更できるが, やらなくてもgit-annex repositoryとしての追加もなされる</p>
-
-<pre><code>$ git annex info
+```
+</code></pre>
+</li>
+<li>
+<p><code>git annex init</code> で説明を変更できるが, やらなくてもgit-annex repositoryとしての追加もなされる</p>
+<pre><code>```
+$ git annex info
 repository mode: indirect
 trusted repositories: 0
 semitrusted repositories: 4
@@ -308,42 +307,44 @@ size of annexed files in working tree: 9 bytes
 bloom filter size: 32 mebibytes (0% full)
 backend usage:
     SHA256E: 1
-</code></pre></li>
-
-<li><p><code>git remote add</code> はやっておかないと, 後述の <code>git annex sync</code> で同期漏れの元になりかねない</p>
-
-<pre><code>$ pwd
-/tmp/annex
-$ git annex sync
-commit
-On branch master
-nothing to commit, working tree clean
-ok
-$ git remote add cloned /tmp/annex-clone
-$ git annex sync
-commit
-On branch master
-nothing to commit, working tree clean
-ok
-pull cloned
-From /tmp/annex-clone
-* [new branch]      git-annex     -&gt; cloned/git-annex
-* [new branch]      master        -&gt; cloned/master
-* [new branch]      synced/master -&gt; cloned/synced/master
-ok
+```
 </code></pre>
-
+</li>
+<li>
+<p><code>git remote add</code> はやっておかないと, 後述の <code>git annex sync</code> で同期漏れの元になりかねない</p>
+<pre><code>    $ pwd
+    /tmp/annex
+    $ git annex sync
+    commit
+    On branch master
+    nothing to commit, working tree clean
+    ok
+    $ git remote add cloned /tmp/annex-clone
+    $ git annex sync
+    commit
+    On branch master
+    nothing to commit, working tree clean
+    ok
+    pull cloned
+    From /tmp/annex-clone
+    * [new branch]      git-annex     -&gt; cloned/git-annex
+    * [new branch]      master        -&gt; cloned/master
+    * [new branch]      synced/master -&gt; cloned/synced/master
+    ok
+</code></pre>
 <ul>
 <li>git remoteで登録されているrepositoryとのみ同期を図っている</li>
-</ul></li>
-</ul></li>
-
-<li><p>metadataの同期は <code>git annex sync</code> を叩けば良い</p>
-
+</ul>
+</li>
+</ul>
+<ol start="6">
+<li>metadataの同期は <code>git annex sync</code> を叩けば良い</li>
+</ol>
 <ul>
-<li><p>あくまでsymlinkとファイル実体の在り処の情報が更新されるだけでデータ自体は同期されない</p>
-
-<pre><code>$ pwd
+<li>
+<p>あくまでsymlinkとファイル実体の在り処の情報が更新されるだけでデータ自体は同期されない</p>
+<pre><code>```
+$ pwd
 /tmp/annex-clone
 $ git annex sync
 commit
@@ -356,33 +357,40 @@ pull origin
 ok
 $ cat hoge
 cat: hoge: そのようなファイルやディレクトリはありません
-</code></pre></li>
-</ul></li>
-
-<li><p>データ実体の取得は <code>git annex get PATH</code>, 実体の削除は <code>git annex drop PATH</code> で行う</p>
-
+```
+</code></pre>
+</li>
+</ul>
+<ol start="7">
+<li>データ実体の取得は <code>git annex get PATH</code>, 実体の削除は <code>git annex drop PATH</code> で行う</li>
+</ol>
 <ul>
-<li><p>取得</p>
-
-<pre><code>$ git annex get hoge
+<li>
+<p>取得</p>
+<pre><code>```
+$ git annex get hoge
 get hoge (from origin...) (checksum...) ok
 (recording state in git...)
 $ cat hoge
 hogehoge
-</code></pre></li>
-
-<li><p>削除</p>
-
-<pre><code>$ git annex drop hoge
+```
+</code></pre>
+</li>
+<li>
+<p>削除</p>
+<pre><code>```
+$ git annex drop hoge
 drop hoge ok
 (recording state in git...)
 $ cat hoge
 cat: hoge: そのようなファイルやディレクトリはありません
-</code></pre></li>
-
-<li><p>実体が全てのgit-annex repositoryからなくなるような削除は受け付けない</p>
-
-<pre><code>$ ../annex
+```
+</code></pre>
+</li>
+<li>
+<p>実体が全てのgit-annex repositoryからなくなるような削除は受け付けない</p>
+<pre><code>```
+$ ../annex
 $ git annex drop hoge
 drop hoge (unsafe)
   Could only verify the existence of 0 out of 1 necessary copies
@@ -392,44 +400,53 @@ drop hoge (unsafe)
   (Use --force to override this check, or adjust numcopies.)
 failed
 git-annex: drop: 1 failed
-</code></pre></li>
-</ul></li>
-
-<li><p>annex管理下のデータの編集は <code>git annex unlock PATH</code> してから行い, それ以外は普通にcommitする</p>
-
+```
+</code></pre>
+</li>
+</ul>
+<ol start="8">
+<li>annex管理下のデータの編集は <code>git annex unlock PATH</code> してから行い, それ以外は普通にcommitする</li>
+</ol>
 <ul>
-<li><p>annexが管理しているデータはreadonlyにされている</p>
-
-<pre><code>$ ls -ln
+<li>
+<p>annexが管理しているデータはreadonlyにされている</p>
+<pre><code>```
+$ ls -ln
 合計 4
 lrwxrwxrwx 1 1000 1000 178  1月  6 06:23 hoge -&gt; .git/annex/objects/Xf/zv/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1
 $ ls -ln  .git/annex/objects/Xf/zv/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1/
 合計 4
 -r--r--r-- 1 1000 1000 9  1月  6 06:23 SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1
-</code></pre></li>
-
-<li><p>unlockによりsymlinkだったworking treeの内容が実体のコピーになる</p>
-
-<pre><code>$ git annex unlock hoge
+```
+</code></pre>
+</li>
+<li>
+<p>unlockによりsymlinkだったworking treeの内容が実体のコピーになる</p>
+<pre><code>```
+$ git annex unlock hoge
 unlock hoge (copying...) ok
 $ ls -ln
 合計 4
 -rw-r--r-- 1 1000 1000 9  1月  6 06:23 hoge
-</code></pre></li>
-
-<li><p>unlock中に別のrepositoryからunlockはエラーになる</p>
-
-<pre><code>$ cd ../annex-clone
+```
+</code></pre>
+</li>
+<li>
+<p>unlock中に別のrepositoryからunlockはエラーになる</p>
+<pre><code>```
+$ cd ../annex-clone
 $ git annex unlock hoge
 unlock hoge
   content not present; cannot unlock
 failed
 git-annex: unlock: 1 failed
-</code></pre></li>
-
-<li><p>commitすると自動でsymlinkに戻してmetadata含め更新してくれる</p>
-
-<pre><code>$ echo &quot;fuga&quot; &gt; hoge
+```
+</code></pre>
+</li>
+<li>
+<p>commitすると自動でsymlinkに戻してmetadata含め更新してくれる</p>
+<pre><code>```
+$ echo &quot;fuga&quot; &gt; hoge
 $ git add hoge
 $ git commit -m 'modify file'
 add hoge ok
@@ -437,64 +454,63 @@ ok
 (recording state in git...)
 [master 5f7ed3c] modify file
  1 file changed, 1 insertion(+), 1 deletion(-)
-</code></pre>
-
-<pre><code>$ ls -ln
+```
+```
+$ ls -ln
 合計 4
 lrwxrwxrwx 1 1000 1000 178  1月  6 07:10 hoge -&gt; .git/annex/objects/VX/m5/SHA256E-s5--e712aff3705ac314b9a890e0ec208faa20054eee514d86ab913d768f94e01279/SHA256E-s5--e712aff3705ac314b9a890e0ec208faa20054eee514d86ab913d768f94e01279
-</code></pre></li>
-
-<li><p>変更されてもsymlinkが更新される一方で実体は別ファイルとなるため, 古いバージョンの情報は残り続ける</p>
-
-<pre><code>$ head .git/annex/objects/*/*/*/*
+```
+</code></pre>
+</li>
+<li>
+<p>変更されてもsymlinkが更新される一方で実体は別ファイルとなるため, 古いバージョンの情報は残り続ける</p>
+<pre><code>```
+$ head .git/annex/objects/*/*/*/*
 ==&gt; .git/annex/objects/VX/m5/SHA256E-s5--e712aff3705ac314b9a890e0ec208faa20054eee514d86ab913d768f94e01279/SHA256E-s5--e712aff3705ac314b9a890e0ec208faa20054eee514d86ab913d768f94e01279 &lt;==
 fuga
 
 ==&gt; .git/annex/objects/Xf/zv/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1/SHA256E-s9--678e851755589c2ed8905b10e0e8302a694af7e40ee86abacfa4bddfba859bb1 &lt;==
 hogehoge
-</code></pre></li>
-</ul></li>
-
-<li><p>git repositoryとセットになっていない特殊なgit-annex repositoryとして
-クラウドストレージ等様々なバックエンドを使える</p>
-
+```
+</code></pre>
+</li>
+</ul>
+<ol start="9">
+<li>git repositoryとセットになっていない特殊なgit-annex repositoryとして
+クラウドストレージ等様々なバックエンドを使える</li>
+</ol>
 <ul>
 <li>ここでは <a href="https://github.com/Lykos153/git-annex-remote-googledrive">git-annex-remote-googledrive</a> をインストールした後,
 <code>git annex initremote</code> でGoogle Driveを利用できるようにした</li>
 <li>追加後は <code>git annex copy PATH --to ANNEX_REMOTE</code> で実体の git-annex repo間のコピーを実施
-
 <ul>
 <li>hash値を名に持つデータの実体を持つファイルが作成される
-<img src="https://ntoofu.github.io/blog/images/git-annex-google-drive.png" alt="git-annex-google-drive" /></li>
-</ul></li>
-</ul></li>
-</ol>
-
+<img src="https://ntoofu.github.io/blog/images/git-annex-google-drive.png" alt="git-annex-google-drive"></li>
+</ul>
+</li>
+</ul>
 <h3 id="仕組みに関する部分のまとめ">仕組みに関する部分のまとめ</h3>
-
 <ul>
 <li>annexで扱うことにしたファイルは, 実体を <code>.git/annex/objects</code> 以下に移され
 working treeにはsymlinkが用いられ, gitとしてもこれを管理する</li>
 <li>その他のメタデータは <code>git-annex</code> ブランチ上に置いてgit repository間で共有される
-
 <ul>
 <li>ファイルの実体の置き場であるgit-annex repositoryの情報</li>
 <li>ファイルごとにどのgit-annex repositoryに実体があるか</li>
-</ul></li>
+</ul>
+</li>
 <li>git-annex repositoryは通常git repositoryと1対1対応する形で存在するが,
 独立して様々なところに配置することも可能で, クラウドストレージも利用可能</li>
 </ul>
-
 <h2 id="結局のところ">結局のところ</h2>
-
 <ul>
 <li>デスクトップやラップトップでやりたいことは概ねできそう</li>
 <li>モバイル(iOS)でgit-annexクライアントが無いため困る
-
 <ul>
 <li>クラウドストレージのクライアントで直接見に行ってもhash名のファイルしかないので
 読み書きに困るし目当てのファイルを見つけられない</li>
-</ul></li>
+</ul>
+</li>
 <li>明示的にgitの操作が必要であり, 自分の目的ではgdrive等で明示的にsyncするのとあまり変わりない</li>
 <li>素直に<a href="https://rclone.org/">rclone</a>(gdriveと似たものでGoogle Drive以外も対応している)で
 以前のような管理をすることにした</li>

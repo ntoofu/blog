@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Posts on ntoofu</title>
@@ -6,10 +6,30 @@
     <description>Recent content in Posts on ntoofu</description>
     <generator>Hugo -- gohugo.io</generator>
     <copyright>&amp;copy; 2018 ntoofu</copyright>
-    <lastBuildDate>Fri, 04 Jan 2019 00:17:21 +0900</lastBuildDate>
-    
-	<atom:link href="https://ntoofu.github.io/blog/post/index.xml" rel="self" type="application/rss+xml" />
-    
+    <lastBuildDate>Fri, 04 Jan 2019 00:17:21 +0900</lastBuildDate><atom:link href="https://ntoofu.github.io/blog/post/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Gentoo Linux で (Portageで) パッケージビルドサーバーを使う</title>
+      <link>https://ntoofu.github.io/blog/post/gentoo-binpkg/</link>
+      <pubDate>Sun, 01 May 2022 00:00:00 +0000</pubDate>
+      
+      <guid>https://ntoofu.github.io/blog/post/gentoo-binpkg/</guid>
+      <description>Gentoo Linux でPortageを利用してソフトウェアをインストールする場合、一般的にはソースコードを取得しビルドすることになるが、消費リソースや依存関係の問題で苦労することも多い。その問題を緩和する方法として、Portageがサポートしている Binary Package のビルドサーバー構築を行った。その大まかな手順を書き残しておく。
+背景 Portageの弱点 Gentoo Linuxでは、標準でPortageというパッケージマネージャを利用する。 その大きな特徴として、パッケージインストール時に、事前にコンパイル・ビルドされたバイナリではなくソースコードを取得してきて、手元の環境でビルドすることが挙げられる。 これにより、細かな粒度で機能の有効化・無効化を調整したり、コンパイラによる最適化の恩恵を最大限に受けることができる。
+一方で、手元でビルドする以上避けられない問題もある。 まず、パッケージインストール時に消費するリソースが大きいことが挙げられる。 ビルドする以上当然のことではあるが、Webブラウザのような巨大なソフトウェアのビルドには多くのCPU,メモリ,ストレージのリソースを消費する。 例えばFirefoxをビルドしようと考えると、Rustがビルド時に必要となるが、このインストールに際しては7GiB以上のディスクの空きスペースが要求される。
+また、依存関係の解決にも苦労することがある。 目的のパッケージをインストールするにあたって、そのビルドに必要となるパッケージもインストールしなければならないため、通常より依存関係が複雑になりやすい。 パッケージによっては同時に環境内にインストールされることを禁じられている組み合わせもあり、これによって思うようにパッケージ更新が進まないことも多い。 特に、しばらくシステムの更新を怠っていると、同時に多くのパッケージの更新を行う必要が出てきてしまい、こうした問題に当たりやすくなる。
+個人的な問題として、長い間放置していたラップトップにインストールしていたGentooのシステムを更新しようとした際に、まさにこれらの問題が大きな妨げとなった。 数世代前のマシンのスペックで大量のパッケージをソースコードからビルドすることは大きな負担であったし、依存関係を紐解いてすべてのパッケージのバージョンを新しくしていくことは現実的でないように思えた。
+Binary Package こうした問題に対する解決策の一つとして、Binary Packageが挙げられる。
+Binary Packageは、パッケージをビルドした後のファイルをまとめたもので、これを利用してパッケージインストールをする場合は、ソースコードをコンパイルする工程が不要となる。 多くのLinuxディスリビューションにおいて、パッケージのインストール時には配布されているコンパイル済みのバイナリを取得してくるのによく似ているが、Portageの場合Binary Packageが配布されているわけではないため、自身でBinary Packageのビルドを行わねばならない。 したがって、実際の活用方法は、あるホストでビルドしたものを同じ構成の別ホストに流用したり、バックアップとしてビルド済みのものを退避しておく、といったことが想定されているようだ。
+個人的に抱えていた古いラップトップ上のシステム更新に際しても、この方法は活用できそうだ。ラップトップ上のシステムと同等の環境を、より性能の高い別のホスト上に準備して、そちらでパッケージのビルドをすべて行ってしまい、その成果物をBinary Packageとしてラップトップに対して配布すれば良い。
+distccとの比較 また、別の案としてdistccによる分散コンパイルを行う方法も考えられる。
+Portageからはdistccという分散コンパイラを呼び出すことができ、コンパイルの処理の一部をリモートホストに任せることができる。ローカルホストとリモートホストでgccのバージョンを揃える必要があるなど、いくつかの注意点はあるが、比較的手軽にローカルホストの負荷軽減を期待できる方法である。
+ただし、ビルドそのものはローカルホストで実行することになるため、ビルド時に依存するパッケージのインストールは必要になるし、オブジェクトファイルのリンク処理などはローカルホストで実施することになる。そのため、今回はdistccを利用することはしていない。
+SYSROOT Binary Packageをビルドする際には、バイナリをビルドする環境と実行する環境が異なる点に注意する必要がある。 CPUアーキテクチャのレベルで異なればクロスコンパイルをすることになるが、例えば同じx86-64系でマイクロアーキテクチャが異なる程度であれば、同じツールチェインを用いつつコンパイルオプションを変えることになる。 今回はマイクロアーキテクチャは異なるがアーキテクチャはx86-64で同一というケースに絞って考える。
+基本的には実行環境に最適化してコンパイルができれば良いのだが、ビルド時に必要なパッケージについてはビルド環境で動作することもあるため、Portageのビルド時の設定を指定する make.conf で一律に実行環境向けの設定を書くわけにもいかない。 ビルド環境と実行環境で共通して動作するレベルまで最適化を控えるようにするのも手だが、せっかくGentooを使っているのだから、最適化したバイナリが得られるように工夫することを考える。
+実は、まさにこうした事態をPortageは想定しており、 ROOT SYSROOT PORTAGE_CONFIGROOT 環境変数の指定によって挙動を細かく制御できるようになっている。 詳細はmanにも記載がある。 これを利用することで、別のホストに最適化したBinary Packageをビルドすることが可能となる。
+手順 ビルドサーバーの準備 試行錯誤することが予想されたこともあって、環境の再作成が容易なようにDockerコンテナを使った。 適当に用意したそこそこのスペックのサーバー上で gentoo/portage イメージとvolumeを共有する形で gentoo/stage3 のイメージを動かし、これをビルド環境として docker exec にて作業することにした。 （イメージの詳細については https://github.com/gentoo/gentoo-docker-images を参照）
+ビルド環境内には /alt というディレクトリを作って、Binary Package向けの各種設定や成果物の配置先として使う。 これは、前述の ROOT SYSROOT PORTAGE_CONFIGROOT で指定する。 例えば ROOT=/alt SYSROOT=/ PORTAGE_CONFIGROOT=/alt のようにすることで、/alt/etc/portage/make.</description>
+    </item>
     
     <item>
       <title>DockerコンテナイメージをvSphere仮想マシンイメージに変換する</title>
@@ -20,10 +40,10 @@
       <description>Dockerでコンテナイメージをビルドしてから変換することで、仮想マシンイメージを作成することができたので、その方法を説明する。
 背景 ソフトウェア動作環境として、仮想マシンよりもコンテナを利用することのほうが最近は一般的になっており、 技術の流行に従えば、あえてコンテナを仮想マシンに変換するようなことは必要ないようにも思われるかもしれない。 確かに、DevOpsのサイクルを高速に回す上で、コンテナの軽量さはメリットであるし、 Kubernetesのようにデプロイを含めたライフサイクルを管理するツールがあるため、 Continuous Deploymentを導入しやすいという点も大きい。 （このあたりは、その軽量さも相まって仮想マシンに比べImmutable Infrastructureに向いていることが影響していると思う。）
 しかしながら、以下のような理由により、仮想マシンを使い続ける場面も多くある。
- ネットワークの要件により、コンテナとしてデプロイすることが難しいことがある  物理機器とのL2での疎通性が必要な場合など CNIプラグインによりコンテナでも理屈の上では実現できることも多いが、ファイアウォールを適用することに難があったり、パフォーマンス上の懸念も残るなど、直ちに実用できるとは言い難い  既存の資産の有効活用  仮想マシンを前提に出来上がった運用があると、移行コストがかさむため、直ちにコンテナ化するとは限らない   とはいえ、仮想マシンのイメージのビルドは、コンテナのイメージのビルドに比較すると、通常手間がかかるのも事実である。 仮想マシンをデプロイし、SSHなどを利用してパッケージのインストールなどのプロビジョニングを実施するため、 オーバーヘッドも避けられない上に、そもそも仮想マシンをデプロイする環境がないとビルドできない。
+ ネットワークの要件により、コンテナとしてデプロイすることが難しいことがある  物理機器とのL2での疎通性が必要な場合など CNIプラグインによりコンテナでも理屈の上では実現できることも多いが、ファイアウォールを適用することに難があったり、パフォーマンス上の懸念も残るなど、直ちに実用できるとは言い難い   既存の資産の有効活用  仮想マシンを前提に出来上がった運用があると、移行コストがかさむため、直ちにコンテナ化するとは限らない    とはいえ、仮想マシンのイメージのビルドは、コンテナのイメージのビルドに比較すると、通常手間がかかるのも事実である。 仮想マシンをデプロイし、SSHなどを利用してパッケージのインストールなどのプロビジョニングを実施するため、 オーバーヘッドも避けられない上に、そもそも仮想マシンをデプロイする環境がないとビルドできない。
 そこで、ビルドを簡略化しようという狙いで、Dockerコンテナイメージをビルドし、 それを仮想マシンのイメージに変換するということをやってみた。
 手順 PoC https://github.com/ntoofu/docker-to-vsphere
- build.sh を実行し、生成される build/vm.ovf をインポートすればOK （手順の詳細はこのリポジトリの中身を見たほうが良いかもしれない）  内容  alpine などのディストリビューションのイメージをもとに、通常通りDockerfileを作ってコンテナビルドするが、以下の工夫をする  Linux kernelをインストールする  apk add linux-virt  /etc/fstab /boot/grub/grub.cfg をイメージに追加する OpenRCや、関連して必要になるパッケージを追加する  openrc busybox-initscripts e2fsprogs  システム的に必要なサービスの自動起動設定をする  docker build  試していないが、 kaniko などでビルドするほうが（CI環境でdocker buildさせる場合はDocker in Dockerなどの工夫が必要になりがちで、それを避けられるため）都合がよいかもしれない  ビルドしたイメージからコンテナを作成し、そのコンテナのファイルをアーカイブファイルとして出力する  docker export でアーカイブファイルとしてコンテナ内のファイルを出力できる  dd などで空のイメージファイルを作成し、 parted などでパーティションテーブルを作成 イメージファイルに対応するloopbackデバイスを作成し、パーティションにファイルシステムを作成（フォーマット） loopbackデバイスをマウントし、その中にコンテナのアーカイブファイルを展開  後述する理由で、 .</description>
+ build.sh を実行し、生成される build/vm.ovf をインポートすればOK （手順の詳細はこのリポジトリの中身を見たほうが良いかもしれない）  内容  alpine などのディストリビューションのイメージをもとに、通常通りDockerfileを作ってコンテナビルドするが、以下の工夫をする  Linux kernelをインストールする  apk add linux-virt   /etc/fstab /boot/grub/grub.cfg をイメージに追加する OpenRCや、関連して必要になるパッケージを追加する  openrc busybox-initscripts e2fsprogs   システム的に必要なサービスの自動起動設定をする   docker build  試していないが、 kaniko などでビルドするほうが（CI環境でdocker buildさせる場合はDocker in Dockerなどの工夫が必要になりがちで、それを避けられるため）都合がよいかもしれない   ビルドしたイメージからコンテナを作成し、そのコンテナのファイルをアーカイブファイルとして出力する  docker export でアーカイブファイルとしてコンテナ内のファイルを出力できる   dd などで空のイメージファイルを作成し、 parted などでパーティションテーブルを作成 イメージファイルに対応するloopbackデバイスを作成し、パーティションにファイルシステムを作成（フォーマット） loopbackデバイスをマウントし、その中にコンテナのアーカイブファイルを展開  後述する理由で、 .</description>
     </item>
     
     <item>
@@ -57,12 +77,10 @@ fstrim HDDのような記録媒体であれば、前述のようにわざわざ�
       <description>先日プロフェッショナルSSL/TLS を読み、 社内勉強会でTLSについて話した。 その際、ブラウザと各Webサイトの間で実際どのようにTLSのハンドシェイクがなされているかを説明するために、 ブラウザのTLS通信をパケットキャプチャしたのだが、うまくキャプチャするのに多少工夫したので、 そのことをこの記事では説明する。
 （普段からLinuxデスクトップを利用しているので、Linuxを前提とする。）
 背景 パケットキャプチャそのものはブラウザを実行するホスト上で tcpdump などを使えば容易に実行できるが、 ブラウザからのTLS通信をキャプチャする場合、次の問題がある。
- 暗号化されているため、中身が確認できない  特にTLS 1.3では、1.2以前は平文だったようなハンドシェイク途中のメッセージも暗号化されているものがある TLSのハンドシェイクそのものだけでなく、上位プロトコル(HTTPなど)の内容も確認したい場合は、復号が必須  関心のあるTLSのセッションだけを選択してキャプチャすることが難しい  送信先IPアドレスは特定困難 WebサイトのIPアドレスはDNSラウンドロビン等で複数から選んで使っている可能性があって、変動する サイト内の一部のコンテンツがサブドメインにあったりCDNを利用していて、送信先アドレスがまちまち キャプチャに使うホスト上で、関係ないプログラムも同じポートやプロトコルを使うため、判別が困難 TCP 443宛やTLSプロトコルを使っているという条件では、キャプチャしたいブラウザ以外からの通信が混ざる   方法 本題となるキャプチャ方法だが、ここでは以下の3つについて説明する。
+ 暗号化されているため、中身が確認できない  特にTLS 1.3では、1.2以前は平文だったようなハンドシェイク途中のメッセージも暗号化されているものがある TLSのハンドシェイクそのものだけでなく、上位プロトコル(HTTPなど)の内容も確認したい場合は、復号が必須   関心のあるTLSのセッションだけを選択してキャプチャすることが難しい  送信先IPアドレスは特定困難  WebサイトのIPアドレスはDNSラウンドロビン等で複数から選んで使っている可能性があって、変動する サイト内の一部のコンテンツがサブドメインにあったりCDNを利用していて、送信先アドレスがまちまち   キャプチャに使うホスト上で、関係ないプログラムも同じポートやプロトコルを使うため、判別が困難  TCP 443宛やTLSプロトコルを使っているという条件では、キャプチャしたいブラウザ以外からの通信が混ざる      方法 本題となるキャプチャ方法だが、ここでは以下の3つについて説明する。
  SSLKEYLOGFILEを活用し、パケット復号する方法 netnsを活用し、特定プロセスのみを対象にしてパケットキャプチャする方法 NFLOGを活用し、特定プロセスのみを対象にしてパケットキャプチャする方法  2番目と3番目に関しては、どちらかを選んで使えばよい。 （先日の社内勉強会のためにキャプチャしたときは、1+3の方法で実施した。）
 SSLKEYLOGFILEを活用し、パケット復号する方法 SSLKEYLOGFILE で調べると説明しているところがたくさんあるので、細かい手順は省くが、要約すれば
- ブラウザを SSLKEYLOGFILE 環境変数にファイルパスを指定した状態で起動する すると SSLKEYLOGFILE で指定されたパスのファイルにTLSセッションごとの鍵に関するパラメタが記録される このファイルをパケットキャプチャと合わせてWiresharkに読み込ませると、TLSセッションを復号してくれる  設定箇所: 編集(Edit) -&amp;gt; 設定(Preferences) -&amp;gt; Protocols -&amp;gt; TLS -&amp;gt; (Pre)-Master-Secret log filename   ということになる。TLSクライアント機能を有する任意のソフトウェアで同じ手法が使えるわけではないが、FirefoxやGoogle Chromeなどの主要ブラウザでは使える方法であるらしい。（もちろん、ブラウザのバージョンやビルドオプション等にも依存するとは思うが）
-軽く調べた感じだと、以下のような事情になっているらしい。
- SSLのライブラリであるNSSには、デバッグ用にTLSセッションを複合するのに必要な鍵情報をSSL key log fileとして吐き出す機能がある  SSLKEYLOGFILE 環境変数が設定されているとき、それが示すファイルパスに定められたフォーマットでpremaster secret等を出力する よってNSSをバックエンドにするソフトウェアではこの方法が使えるはず  TLSに関するソフトウェアのいくつかが、このSSL key log fileをサポートしている  キャプチャしたパケット解析に広く使われるWiresharkでは、このSSL key log fileを使ってパケットの復号をする機能をサポートしている ちなみに、NSSを使うソフトウェアだけでなく、OpenSSLなども同じフォーマットのSSL key logを受け取るコールバック関数がある NSSのように SSLKEYLOGFILE 環境変数をライブラリ側で読み取ってファイルに吐き出すところまではやってくれなさそう   netnsを活用し、特定プロセスのみを対象にしてパケットキャプチャする方法 netns ことnetwork namespaceというLinuxの機能を使うことで、 Linuxカーネルのネットワークスタックは仮想的に分離できる。</description>
+ ブラウザを SSLKEYLOGFILE 環境変数にファイルパスを指定した状態で起動する すると SSLKEYLOGFILE で指定されたパスのファイルにTLSセッションごとの鍵に関するパラメタが記録される このファイルをパケットキャプチャと合わせてWiresharkに読み込ませると、TLSセッションを復号してくれる  設定箇所: 編集(Edit) -&amp;gt; 設定(Preferences) -&amp;gt; Protocols -&amp;gt; TLS -&amp;gt; (Pre)-Master-Secret log filename    ということになる。TLSクライアント機能を有する任意のソフトウェアで同じ手法が使えるわけではないが、FirefoxやGoogle Chromeなどの主要ブラウザでは使える方法であるらしい。（もちろん、ブラウザのバージョンやビルドオプション等にも依存するとは思うが）</description>
     </item>
     
     <item>
@@ -96,7 +114,7 @@ bridge CNI plugin 標準的なCNIプラグインとして https://github.com/con
       
       <guid>https://ntoofu.github.io/blog/post/eclipse-titan/</guid>
       <description>TTCN-3について気になったので試してみた。
-TTCN-3 について TTCN-3 とは  通信関係のconformance testing (仕様や標準などに準拠しているかを調べるテストのこと) 用の言語のひとつ  テレコム系とかで使われていたりする？（推測）  プロトコル通りに動作するかを確かめたりするためのものなので, 通信のやり取りを柔軟に記述できる  対象とするレイヤ次第ではIPパケットやEthernetフレームのレベルで操作でき, 自由にヘッダを設定して送信したりできる 指定したパターンを満たすメッセージ(フレームやパケット等)を受け取ったら…という条件分岐も簡単に書ける   TTCN-3 の実行モデル  parallelなテスト実行をサポートしていて, 1つのテストで複数のホスト間のやり取りを記述することが出来る  componentと呼ばれるある種のオブジェクトとそのcomponent間のやりとりをテストに記述でき, componentをそれぞれ別のホストに割り当てて動作させることが出来る テスト用の実行ファイルを各テスト実行用ホスト(host controller)に配置して実行すると, 制御用ホスト(main controller)にTCP接続し, 制御用ホスト上に存在する設定ファイルに基づいてテストが実行され, テストの結果やログは制御用ホストに収集される   TTCN-3 でできそうなこと  ネットワーク機器やNFVなどが期待通りの動作をしているかのテスト  例えばファイアウォールを挟んだ2ホスト間で通信を行い, 期待通りにパケットを通過・遮断させるのか  あるプロトコルを実装したソフトウェアが, そのプロトコルでの特定のリクエスト等に対して期待した応答をするか  例えばDNSサーバーに適当なクエリを投げ, 期待した応答が得られるか  こちらの書籍の中では例としてそのような題材を扱っていた    Eclipse Titanについて  TTCN-3自体は標準化された言語であり, その処理系の1つとしてEclipse Titanが存在する その名の通りEclipse Foundation傘下のプロジェクト TTCN-3のファイルをEclipse Titanでコンパイル(トランスパイル?)するとC++のコードになり, これをコンパイルしてテスト実行用のバイナリを得る…といった流れになる TTCN-3の書き方も含めて, 使い方については https://projects.eclipse.org/projects/tools.titan/downloads にまとめて公開されているPDFなどを参照するのが良い。  試してみた https://github.</description>
+TTCN-3 について TTCN-3 とは  通信関係のconformance testing (仕様や標準などに準拠しているかを調べるテストのこと) 用の言語のひとつ  テレコム系とかで使われていたりする？（推測）   プロトコル通りに動作するかを確かめたりするためのものなので, 通信のやり取りを柔軟に記述できる  対象とするレイヤ次第ではIPパケットやEthernetフレームのレベルで操作でき, 自由にヘッダを設定して送信したりできる 指定したパターンを満たすメッセージ(フレームやパケット等)を受け取ったら…という条件分岐も簡単に書ける    TTCN-3 の実行モデル  parallelなテスト実行をサポートしていて, 1つのテストで複数のホスト間のやり取りを記述することが出来る  componentと呼ばれるある種のオブジェクトとそのcomponent間のやりとりをテストに記述でき, componentをそれぞれ別のホストに割り当てて動作させることが出来る テスト用の実行ファイルを各テスト実行用ホスト(host controller)に配置して実行すると, 制御用ホスト(main controller)にTCP接続し, 制御用ホスト上に存在する設定ファイルに基づいてテストが実行され, テストの結果やログは制御用ホストに収集される    TTCN-3 でできそうなこと  ネットワーク機器やNFVなどが期待通りの動作をしているかのテスト  例えばファイアウォールを挟んだ2ホスト間で通信を行い, 期待通りにパケットを通過・遮断させるのか   あるプロトコルを実装したソフトウェアが, そのプロトコルでの特定のリクエスト等に対して期待した応答をするか  例えばDNSサーバーに適当なクエリを投げ, 期待した応答が得られるか  こちらの書籍の中では例としてそのような題材を扱っていた      Eclipse Titanについて  TTCN-3自体は標準化された言語であり, その処理系の1つとしてEclipse Titanが存在する その名の通りEclipse Foundation傘下のプロジェクト TTCN-3のファイルをEclipse Titanでコンパイル(トランスパイル?</description>
     </item>
     
     <item>
@@ -128,9 +146,8 @@ reverse teaming の影響 検証したところでは、promiscuous modeであ�
       <pubDate>Thu, 02 May 2019 00:00:00 +0000</pubDate>
       
       <guid>https://ntoofu.github.io/blog/post/research-ipvs-and-dnat/</guid>
-      <description>TL;DR  IPVSはデフォルトでconntrack(標準のconnection tracking)を利用しない そのせいでIPVSに処理させるパケットをNATしたりすると期待通り動かないことがある 必要があれば /proc/sys/net/ipv4/vs/conntrack (net.ipv4.vs.conntrack) を設定しよう  背景  iptablesの DNAT targetと IPVS(LVS/NAT構成)を共存させると上手く行かない  PREROUTING chainにおいて REDIRECT target によりポート番号をIPVSのvirtual serviceのものに変換するように設定した場合, REDIRECTされるポートに対し接続すると, 戻り通信(SYNに対するSYN+ACK)の送信元ポートがvirtual serviceのものになる（期待されるのは, 変換前のもの) (PREROUTING chainの) REDIRECT targetは内部的には DNAT と同等の動きをするようで, DNAT でも起きる  以下のようにすれば再現する
- テスト用ホストでnetcatなどで適当にListenしてくれるポートを2つ作り, IPVSでバランシング設定
-(while true;do nc -l -p 1001; echo 1001; done)&amp;amp; (while true;do nc -l -p 1002; echo 1002; done)&amp;amp;  ipvsadm -A -t 172.16.1.8:1000 -s rr ipvsadm -a -t 172.16.1.8:1000 -r 172.</description>
+      <description>TL;DR  IPVSはデフォルトでconntrack(標準のconnection tracking)を利用しない そのせいでIPVSに処理させるパケットをNATしたりすると期待通り動かないことがある 必要があれば /proc/sys/net/ipv4/vs/conntrack (net.ipv4.vs.conntrack) を設定しよう  背景  iptablesの DNAT targetと IPVS(LVS/NAT構成)を共存させると上手く行かない  PREROUTING chainにおいて REDIRECT target によりポート番号をIPVSのvirtual serviceのものに変換するように設定した場合, REDIRECTされるポートに対し接続すると, 戻り通信(SYNに対するSYN+ACK)の送信元ポートがvirtual serviceのものになる（期待されるのは, 変換前のもの) (PREROUTING chainの) REDIRECT targetは内部的には DNAT と同等の動きをするようで, DNAT でも起きる   以下のようにすれば再現する   テスト用ホストでnetcatなどで適当にListenしてくれるポートを2つ作り, IPVSでバランシング設定
+(while true;do nc -l -p 1001; echo 1001; done)&amp;amp; (while true;do nc -l -p 1002; echo 1002; done)&amp;amp; ipvsadm -A -t 172.16.1.8:1000 -s rr ipvsadm -a -t 172.16.1.8:1000 -r 172.</description>
     </item>
     
     <item>
@@ -140,7 +157,7 @@ reverse teaming の影響 検証したところでは、promiscuous modeであ�
       
       <guid>https://ntoofu.github.io/blog/post/try-looking-glass-kvm/</guid>
       <description>Looking Glass というものを「例のグラボ」で試してみた。
-Looking Glass とは  同名のものが色々ある気がするが, 今試すのは これ  最近よく耳にするのはホログラフィックディスプレイである Looking Glassだが, これの話ではない ネットワーク関連とかだと指定したホストにICMPパケットを投げてくれるサービスをLooking Glassと 言うが, それの話でもない  KVM (Kernel-based Virtual Machine) にグラフィックスカードをPass-throughで見せているときに, そのグラフィックスカードの出力をKVMホスト上で覗き見るソフトウェア  低遅延であることが大きな特長  KVMによる仮想化環境で, 今の所ゲストがWindows10の場合にのみ利用可能  背景  Linuxデスクトップ上にKVMでWindows10をゲスト動作させ, そこでDirectXを利用するようなゲームを行う&amp;hellip; といったユースケースが主に想定される LinuxでWindowsゲームを行う場合, 以下のような選択肢が主に考えられる (Looking Glassはこの2番めの方法)  Proton  Windows APIを変換することでWindowsアプリケーションを Linux等のOSで動かそうとする Wine をforkしている Vulkan APIというクロスプラットフォームな低レイヤーのグラフィックスAPIを利用して, DirectXを実装(DXVK)することで, Linux上でDirectXを処理できるようにしている  Linux上で仮想マシンを動作させ, WindowsをゲストOSとして利用する  DirectXの処理をさせるため, ホスト上のグラフィックスカードをパススルーでゲストOSに見せる  WindowsゲームがDirectXではなくVulkanを用いて作られるようになるのを待つ  Protonについては試していないのでなんともわからないが, 仮想マシンにグラフィックスカードを パススルーする場合, そのグラフィックスカードの画面出力を利用することになる  つまり, KVMホストのLinuxでも画面出力を利用する場合は, Linux用とゲストのWindows用に 2つのディスプレイ（又は1つのディスプレイの2つの画面入力）を消費しないといけない この点を遅延をほとんど生まずに解消できるのがLooking Glassのメリット  但し, 後述の通り実際には画面の接続だけはしたほうがよかったりする    動作原理  パススルーしたグラフィックスカードのフレームバッファ（各種レンダリングの結果とも言える, 実際に画面へ出力するデータを格納している）の中身を, KVMホストから参照してKVMホスト側の GUI環境に描画する  DXGI Desktop Duplicationという, 画面キャプチャに用いるDirectX関連のAPIを使って, フレームをメインメモリ上にコピーするプログラムをゲストWindows上で動作させる ゲストOSにてメインメモリ上に取ってきたフレームは, ivshmem (Inter-VM shared memory) というKVMの機能を使って, KVMホストから参照できるようにする KVMホストのGUI環境でクライアントのソフトウェアを動作させ, ivshmemを参照してフレームを描画する   mermaid.</description>
+Looking Glass とは  同名のものが色々ある気がするが, 今試すのは これ  最近よく耳にするのはホログラフィックディスプレイである Looking Glassだが, これの話ではない ネットワーク関連とかだと指定したホストにICMPパケットを投げてくれるサービスをLooking Glassと 言うが, それの話でもない   KVM (Kernel-based Virtual Machine) にグラフィックスカードをPass-throughで見せているときに, そのグラフィックスカードの出力をKVMホスト上で覗き見るソフトウェア  低遅延であることが大きな特長   KVMによる仮想化環境で, 今の所ゲストがWindows10の場合にのみ利用可能  背景  Linuxデスクトップ上にKVMでWindows10をゲスト動作させ, そこでDirectXを利用するようなゲームを行う&amp;hellip; といったユースケースが主に想定される LinuxでWindowsゲームを行う場合, 以下のような選択肢が主に考えられる (Looking Glassはこの2番めの方法)  Proton  Windows APIを変換することでWindowsアプリケーションを Linux等のOSで動かそうとする Wine をforkしている Vulkan APIというクロスプラットフォームな低レイヤーのグラフィックスAPIを利用して, DirectXを実装(DXVK)することで, Linux上でDirectXを処理できるようにしている   Linux上で仮想マシンを動作させ, WindowsをゲストOSとして利用する  DirectXの処理をさせるため, ホスト上のグラフィックスカードをパススルーでゲストOSに見せる   WindowsゲームがDirectXではなくVulkanを用いて作られるようになるのを待つ   Protonについては試していないのでなんともわからないが, 仮想マシンにグラフィックスカードを パススルーする場合, そのグラフィックスカードの画面出力を利用することになる  つまり, KVMホストのLinuxでも画面出力を利用する場合は, Linux用とゲストのWindows用に 2つのディスプレイ（又は1つのディスプレイの2つの画面入力）を消費しないといけない この点を遅延をほとんど生まずに解消できるのがLooking Glassのメリット  但し, 後述の通り実際には画面の接続だけはしたほうがよかったりする      動作原理  パススルーしたグラフィックスカードのフレームバッファ（各種レンダリングの結果とも言える, 実際に画面へ出力するデータを格納している）の中身を, KVMホストから参照してKVMホスト側の GUI環境に描画する  DXGI Desktop Duplicationという, 画面キャプチャに用いるDirectX関連のAPIを使って, フレームをメインメモリ上にコピーするプログラムをゲストWindows上で動作させる ゲストOSにてメインメモリ上に取ってきたフレームは, ivshmem (Inter-VM shared memory) というKVMの機能を使って, KVMホストから参照できるようにする KVMホストのGUI環境でクライアントのソフトウェアを動作させ, ivshmemを参照してフレームを描画する    mermaid.</description>
     </item>
     
     <item>
@@ -151,7 +168,7 @@ Looking Glass とは  同名のものが色々ある気がするが, 今試す�
       <guid>https://ntoofu.github.io/blog/post/try-multus-cni/</guid>
       <description>先日の記事でも軽くふれた Multus CNI plugin を実際に使ってみた。
 （盛んに開発されているため, 執筆時から内容が変わっている可能性があるので注意）
-Multus CNI について  CNI plugin を複数呼び出すことで, container に複数のNetwork interfaceを与えるCNI plugin Kubernetes と連携し, Pod の Manifest に応じて利用するNetworkを切り替えたりも可能  Kubernetes連携時の動作の仕組み  各ノードのCNI設定ファイル(デフォルト: /etc/cni/net.d/)を設定し, Multusが呼び出されるようにする  現時点ではDaemonSetとして作成したPodを使ってノードに対するCNI設定ファイル配置を実現している  nfvpe/multus というコンテナイメージに, 設定ファイルを配置するべきホストのディレクトリを volumeとしてマウントさせる 設定内容はコンテナ内のファイルにあるので必要に応じてdaemon用コンテナにConfigMapを volumeマウントさせる  半年ほど前に触ったときは, ホスト側の設定(/etc/cni/net.d/)を直接編集する手順が案内されていた (と思う)ので, また変わるかもしれない  軽く見た限り, Calicoやflannelも同じようなことをしていそう   各ノードにMultusを含む利用したいCNI pluginバイナリを配置しておき, KubeletがMultusを呼び出し, Multusが1つ以上のCNI pluginを呼び出す  Multus CNI pluginのバイナリ配置については前述の DaemonSet がやってくれる  Podには必ず1つ共通のネットワーク (=&amp;ldquo;Default network&amp;rdquo;) が eth0 として設定される  おそらくKubernetesのPod Networkとしての要件を満たすため  Custom Resource Definition (CRD) という Kubenetes が提供しているAPI拡張の仕組みを利用し, Default network以外のネットワークを定義し, PodはManifestにてこれを指定する Multus CNI pluginはそれ自体がKubernetes APIを呼び出し, CRDを参照してネットワークに対して どのCNI pluginをどういうconfigで呼び出すかを決定する  セットアップ ここでは, kubeadm のインストールが完了し, Kubenetesクラスタ構築直前の状態からの構築を想定する。 (Creating a single master cluster with kubeadmの, &amp;ldquo;Installing a pod network add-on&amp;rdquo; の直前の状態) 今回, Default networkにはProject Calicoを利用してみる。</description>
+Multus CNI について  CNI plugin を複数呼び出すことで, container に複数のNetwork interfaceを与えるCNI plugin Kubernetes と連携し, Pod の Manifest に応じて利用するNetworkを切り替えたりも可能  Kubernetes連携時の動作の仕組み  各ノードのCNI設定ファイル(デフォルト: /etc/cni/net.d/)を設定し, Multusが呼び出されるようにする  現時点ではDaemonSetとして作成したPodを使ってノードに対するCNI設定ファイル配置を実現している  nfvpe/multus というコンテナイメージに, 設定ファイルを配置するべきホストのディレクトリを volumeとしてマウントさせる 設定内容はコンテナ内のファイルにあるので必要に応じてdaemon用コンテナにConfigMapを volumeマウントさせる   半年ほど前に触ったときは, ホスト側の設定(/etc/cni/net.d/)を直接編集する手順が案内されていた (と思う)ので, また変わるかもしれない  軽く見た限り, Calicoやflannelも同じようなことをしていそう     各ノードにMultusを含む利用したいCNI pluginバイナリを配置しておき, KubeletがMultusを呼び出し, Multusが1つ以上のCNI pluginを呼び出す  Multus CNI pluginのバイナリ配置については前述の DaemonSet がやってくれる   Podには必ず1つ共通のネットワーク (=&amp;ldquo;Default network&amp;rdquo;) が eth0 として設定される  おそらくKubernetesのPod Networkとしての要件を満たすため   Custom Resource Definition (CRD) という Kubenetes が提供しているAPI拡張の仕組みを利用し, Default network以外のネットワークを定義し, PodはManifestにてこれを指定する Multus CNI pluginはそれ自体がKubernetes APIを呼び出し, CRDを参照してネットワークに対して どのCNI pluginをどういうconfigで呼び出すかを決定する  セットアップ ここでは, kubeadm のインストールが完了し, Kubenetesクラスタ構築直前の状態からの構築を想定する。 (Creating a single master cluster with kubeadmの, &amp;ldquo;Installing a pod network add-on&amp;rdquo; の直前の状態) 今回, Default networkにはProject Calicoを利用してみる。</description>
     </item>
     
     <item>
@@ -161,7 +178,7 @@ Multus CNI について  CNI plugin を複数呼び出すことで, container �
       
       <guid>https://ntoofu.github.io/blog/post/container-network-interface/</guid>
       <description>社内のKubernetes勉強会で, 前より関心のあった Container Network Interface (CNI) の説明を することになった。その際の資料をここに書いておく。
-Container Network Interface (CNI) の基本 CNIとは何か  Linux container内のnetwork interfaceを設定するプラグインを書くための 仕様とライブラリからなるCNCFプロジェクト containerのネットワーク接続性を作ることと削除時の後始末だけを考えているため, 仕様は単純でサポート状況も良い(k8s専用というわけでもない) GitHub  CNIが生まれてきた背景  Linux containerが急速に発展しcontainer runtimeやオーケストレータが複数出てきた 環境依存しやすいネットワーク周りをplugableにする方法は確立されていなかった それぞれが独自に問題を解決する無駄を避けるべく, CNIが共通のインターフェイスを定める  元はと言えば rkt 用に考えられたものらしい   CNI plugins  CNIに準拠したpluginはたくさんあり, READMEにも書いてある Golangで書かれたものは多いが, CNIは言語については規定していないため何で書いても良い  CNI仕様  SPEC.mdに仕様が記されている CNI からすれば container = Linux network namespace (netns) (runtimeによりnetnsを作る単位が異なるが, CNIとしてはcontainer = network namespaceとみなす)  そもそも, Linux containerから見えるネットワークインターフェイスは コンテナ用のnetns内のinterfaceでしかない  &amp;ldquo;network&amp;rdquo; ごとに, どのpluginを用いるかなどの設定をCNIが定めるJSON形式で用意する  name: host内で一意な, networkを表す名前 type: そのnetworkで使うCNI pluginの実行ファイル名を指定 cniVersion: CNI specのバージョン ipam: I/FへのIPアドレス割り当てを管理するIPAM pluginの設定 dns: container(netns)に対するDNSを設定する その他, plugin固有の設定 (e.</description>
+Container Network Interface (CNI) の基本 CNIとは何か  Linux container内のnetwork interfaceを設定するプラグインを書くための 仕様とライブラリからなるCNCFプロジェクト containerのネットワーク接続性を作ることと削除時の後始末だけを考えているため, 仕様は単純でサポート状況も良い(k8s専用というわけでもない) GitHub  CNIが生まれてきた背景  Linux containerが急速に発展しcontainer runtimeやオーケストレータが複数出てきた 環境依存しやすいネットワーク周りをplugableにする方法は確立されていなかった それぞれが独自に問題を解決する無駄を避けるべく, CNIが共通のインターフェイスを定める  元はと言えば rkt 用に考えられたものらしい    CNI plugins  CNIに準拠したpluginはたくさんあり, READMEにも書いてある Golangで書かれたものは多いが, CNIは言語については規定していないため何で書いても良い  CNI仕様  SPEC.mdに仕様が記されている CNI からすれば container = Linux network namespace (netns) (runtimeによりnetnsを作る単位が異なるが, CNIとしてはcontainer = network namespaceとみなす)  そもそも, Linux containerから見えるネットワークインターフェイスは コンテナ用のnetns内のinterfaceでしかない   &amp;ldquo;network&amp;rdquo; ごとに, どのpluginを用いるかなどの設定をCNIが定めるJSON形式で用意する  name: host内で一意な, networkを表す名前 type: そのnetworkで使うCNI pluginの実行ファイル名を指定 cniVersion: CNI specのバージョン ipam: I/FへのIPアドレス割り当てを管理するIPAM pluginの設定 dns: container(netns)に対するDNSを設定する その他, plugin固有の設定 (e.</description>
     </item>
     
     <item>
@@ -171,7 +188,7 @@ Container Network Interface (CNI) の基本 CNIとは何か  Linux container内�
       
       <guid>https://ntoofu.github.io/blog/post/git-annex/</guid>
       <description>LWN.netの記事 で git-annex について知ったのでちょっと試してみた。
-git-annex  LWN.netの記事もそうであるように, Gitで巨大なファイルを管理する際に git-lfsと並んで名前があがることがある 大きなファイルに限らず, ファイルの実体とバージョン管理を分離することができる ユースケースについては git-annex の説明を 読むのがわかり易い  例1: バックアップ・アーカイブ用途 例2: キャッシュ的な用途（クラウドストレージにあるデータをリムーバブルメディアに持ってきて 利用した後, 書き戻す）  柔軟な制御は出来る反面面倒な部分が多い  実体の置き場を複数に分散させられるので, 分散ストレージもどきっぽくできる  置き場にはクラウドストレージ等も利用可能  保持しておくべき実体のコピーの数とかも指定できる（バックアップ用途に便利） 実体が手元にあるかないか気にする必要があるが, 裏を返せば実体は必要なものだけ持つこともできる バージョン管理はgitの流儀に従って都度自分で行うか自動でやる仕組みを整える必要がある  cronジョブを仕込むとか   ホスティングサービスの対応は薄い  GitLabでは対応を打ち切られている  ちなみに haskell で書かれている模様  検証のモチベーション  デスクトップ, ラップトップ, モバイルのデータ共有に使えないか 以下のような運用を実現したい  デスクトップは常にアクセスできるNFS上のデータにアクセスするようにしておきたい NFS上のデータは適宜クラウドストレージ(Google Drive)にバックアップとしてデータをコピーしておきたい ラップトップは自宅ではNFSのデータを使いつつ, 外出先ではローカルのデータを使い, もしローカルに無い場合はクラウドストレージからデータを持ってくるようにする  ローカルの容量が小さいので, 必要なデータだけを持ってきたい  モバイル(iOS)から参照が必要なものは都度クラウドストレージから読み出しつつ, 撮った写真とかはクラウドストレージにアップロードする  gdriveなどでrsyncライクに同期を取ることはやっていたが, 気になる部分があってやめていた  同期忘れで並行して変更が発生してしまい不整合が出たら嫌 NFSを使っている関係で書き換え発生時に自動的に同期することが出来ない   試してわかったこと 公式にwalkthroughがあるので, 参考にして色々試しつつ動きを確認した。</description>
+git-annex  LWN.netの記事もそうであるように, Gitで巨大なファイルを管理する際に git-lfsと並んで名前があがることがある 大きなファイルに限らず, ファイルの実体とバージョン管理を分離することができる ユースケースについては git-annex の説明を 読むのがわかり易い  例1: バックアップ・アーカイブ用途 例2: キャッシュ的な用途（クラウドストレージにあるデータをリムーバブルメディアに持ってきて 利用した後, 書き戻す）   柔軟な制御は出来る反面面倒な部分が多い  実体の置き場を複数に分散させられるので, 分散ストレージもどきっぽくできる  置き場にはクラウドストレージ等も利用可能   保持しておくべき実体のコピーの数とかも指定できる（バックアップ用途に便利） 実体が手元にあるかないか気にする必要があるが, 裏を返せば実体は必要なものだけ持つこともできる バージョン管理はgitの流儀に従って都度自分で行うか自動でやる仕組みを整える必要がある  cronジョブを仕込むとか     ホスティングサービスの対応は薄い  GitLabでは対応を打ち切られている   ちなみに haskell で書かれている模様  検証のモチベーション  デスクトップ, ラップトップ, モバイルのデータ共有に使えないか 以下のような運用を実現したい  デスクトップは常にアクセスできるNFS上のデータにアクセスするようにしておきたい NFS上のデータは適宜クラウドストレージ(Google Drive)にバックアップとしてデータをコピーしておきたい ラップトップは自宅ではNFSのデータを使いつつ, 外出先ではローカルのデータを使い, もしローカルに無い場合はクラウドストレージからデータを持ってくるようにする  ローカルの容量が小さいので, 必要なデータだけを持ってきたい   モバイル(iOS)から参照が必要なものは都度クラウドストレージから読み出しつつ, 撮った写真とかはクラウドストレージにアップロードする   gdriveなどでrsyncライクに同期を取ることはやっていたが, 気になる部分があってやめていた  同期忘れで並行して変更が発生してしまい不整合が出たら嫌 NFSを使っている関係で書き換え発生時に自動的に同期することが出来ない    試してわかったこと 公式にwalkthroughがあるので, 参考にして色々試しつつ動きを確認した。</description>
     </item>
     
     <item>

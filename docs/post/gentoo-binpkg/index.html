@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<meta name="generator" content="Hugo 0.98.0" />
+		<title>Gentoo Linux で (Portageで) パッケージビルドサーバーを使う - ntoofu</title>
+
+		<meta name="description" content="Gentoo Linux でPortageを利用してソフトウェアをインストールする場合、一般的にはソースコードを取得しビルドすることになるが、消費リソースや依存関係の問題で苦労することも多い。その問題を緩和する方法として、Portageがサポートしている Binary Package のビルドサーバー構築を行った。その大まかな手順を書き残しておく。
+背景 Portageの弱点 Gentoo Linuxでは、標準でPortageというパッケージマネージャを利用する。 その大きな特徴として、パッケージインストール時に、事前にコンパイル・ビルドされたバイナリではなくソースコードを取得してきて、手元の環境でビルドすることが挙げられる。 これにより、細かな粒度で機能の有効化・無効化を調整したり、コンパイラによる最適化の恩恵を最大限に受けることができる。
+一方で、手元でビルドする以上避けられない問題もある。 まず、パッケージインストール時に消費するリソースが大きいことが挙げられる。 ビルドする以上当然のことではあるが、Webブラウザのような巨大なソフトウェアのビルドには多くのCPU,メモリ,ストレージのリソースを消費する。 例えばFirefoxをビルドしようと考えると、Rustがビルド時に必要となるが、このインストールに際しては7GiB以上のディスクの空きスペースが要求される。
+また、依存関係の解決にも苦労することがある。 目的のパッケージをインストールするにあたって、そのビルドに必要となるパッケージもインストールしなければならないため、通常より依存関係が複雑になりやすい。 パッケージによっては同時に環境内にインストールされることを禁じられている組み合わせもあり、これによって思うようにパッケージ更新が進まないことも多い。 特に、しばらくシステムの更新を怠っていると、同時に多くのパッケージの更新を行う必要が出てきてしまい、こうした問題に当たりやすくなる。
+個人的な問題として、長い間放置していたラップトップにインストールしていたGentooのシステムを更新しようとした際に、まさにこれらの問題が大きな妨げとなった。 数世代前のマシンのスペックで大量のパッケージをソースコードからビルドすることは大きな負担であったし、依存関係を紐解いてすべてのパッケージのバージョンを新しくしていくことは現実的でないように思えた。
+Binary Package こうした問題に対する解決策の一つとして、Binary Packageが挙げられる。
+Binary Packageは、パッケージをビルドした後のファイルをまとめたもので、これを利用してパッケージインストールをする場合は、ソースコードをコンパイルする工程が不要となる。 多くのLinuxディスリビューションにおいて、パッケージのインストール時には配布されているコンパイル済みのバイナリを取得してくるのによく似ているが、Portageの場合Binary Packageが配布されているわけではないため、自身でBinary Packageのビルドを行わねばならない。 したがって、実際の活用方法は、あるホストでビルドしたものを同じ構成の別ホストに流用したり、バックアップとしてビルド済みのものを退避しておく、といったことが想定されているようだ。
+個人的に抱えていた古いラップトップ上のシステム更新に際しても、この方法は活用できそうだ。ラップトップ上のシステムと同等の環境を、より性能の高い別のホスト上に準備して、そちらでパッケージのビルドをすべて行ってしまい、その成果物をBinary Packageとしてラップトップに対して配布すれば良い。
+distccとの比較 また、別の案としてdistccによる分散コンパイルを行う方法も考えられる。
+Portageからはdistccという分散コンパイラを呼び出すことができ、コンパイルの処理の一部をリモートホストに任せることができる。ローカルホストとリモートホストでgccのバージョンを揃える必要があるなど、いくつかの注意点はあるが、比較的手軽にローカルホストの負荷軽減を期待できる方法である。
+ただし、ビルドそのものはローカルホストで実行することになるため、ビルド時に依存するパッケージのインストールは必要になるし、オブジェクトファイルのリンク処理などはローカルホストで実施することになる。そのため、今回はdistccを利用することはしていない。
+SYSROOT Binary Packageをビルドする際には、バイナリをビルドする環境と実行する環境が異なる点に注意する必要がある。 CPUアーキテクチャのレベルで異なればクロスコンパイルをすることになるが、例えば同じx86-64系でマイクロアーキテクチャが異なる程度であれば、同じツールチェインを用いつつコンパイルオプションを変えることになる。 今回はマイクロアーキテクチャは異なるがアーキテクチャはx86-64で同一というケースに絞って考える。
+基本的には実行環境に最適化してコンパイルができれば良いのだが、ビルド時に必要なパッケージについてはビルド環境で動作することもあるため、Portageのビルド時の設定を指定する make.conf で一律に実行環境向けの設定を書くわけにもいかない。 ビルド環境と実行環境で共通して動作するレベルまで最適化を控えるようにするのも手だが、せっかくGentooを使っているのだから、最適化したバイナリが得られるように工夫することを考える。
+実は、まさにこうした事態をPortageは想定しており、 ROOT SYSROOT PORTAGE_CONFIGROOT 環境変数の指定によって挙動を細かく制御できるようになっている。 詳細はmanにも記載がある。 これを利用することで、別のホストに最適化したBinary Packageをビルドすることが可能となる。
+手順 ビルドサーバーの準備 試行錯誤することが予想されたこともあって、環境の再作成が容易なようにDockerコンテナを使った。 適当に用意したそこそこのスペックのサーバー上で gentoo/portage イメージとvolumeを共有する形で gentoo/stage3 のイメージを動かし、これをビルド環境として docker exec にて作業することにした。 （イメージの詳細については https://github.com/gentoo/gentoo-docker-images を参照）
+ビルド環境内には /alt というディレクトリを作って、Binary Package向けの各種設定や成果物の配置先として使う。 これは、前述の ROOT SYSROOT PORTAGE_CONFIGROOT で指定する。 例えば ROOT=/alt SYSROOT=/ PORTAGE_CONFIGROOT=/alt のようにすることで、/alt/etc/portage/make.">
+
+		<meta name="google-site-verification" content="-dM2-3-X8FeQrDaA7h-n_6oJ7drfIg3AD4AjEvr6LGw" />
+
+		
+		
+		
+        <link rel="stylesheet" href="https://ntoofu.github.io/blog/css/ui.min.css"/>
+		
+		
+		
+
+		<link  rel="stylesheet" href="https://fonts.googleapis.com/css?family=Fira+Mono|Lato|Raleway">
+
+		
+
+		<style>
+	a { color: #2c6be0; }
+	blockquote {
+		border-left-color: #2c6be0;
+		border-right-color: #2c6be0; }
+	.bar a:hover {
+		color: #2c6be0;
+		text-decoration: none; }
+	.sep {
+		margin-top: 2rem;
+		margin-bottom: 1rem;
+		margin-left:0;
+		width: 24rem;
+		border-top: 2px solid #2c6be0; }
+</style>
+
+	</head>
+
+<body>
+<header class="container no-print">
+	<div class="u-header">
+		<nav class="bar">
+	<ul><li>
+			<a href="https://ntoofu.github.io/blog/">
+                <img class="icon-text" src="https://ntoofu.github.io/blog/img/prev.svg"/>
+			</a>
+		</li><li><a href="https://ntoofu.github.io/blog/about/">About</a></li><li><a href="https://ntoofu.github.io/blog/post/">Posts</a></li><li><a href="https://ntoofu.github.io/blog/work/">Works</a></li></ul>
+</nav>
+
+	</div>
+</header>
+<main class="container">
+
+<article>
+	<header><hgroup id="brand">
+	<h1>Gentoo Linux で (Portageで) パッケージビルドサーバーを使う</h1>
+	<h5>
+		
+		<time datetime="2022-05-01 00:00:00 &#43;0000 UTC">2022-05-01</time>
+		<span class="no-print">
+			<span>
+	</h5>
+	
+</hgroup>
+<hr class="sep" />
+</header>
+	<p>Gentoo Linux でPortageを利用してソフトウェアをインストールする場合、一般的にはソースコードを取得しビルドすることになるが、消費リソースや依存関係の問題で苦労することも多い。その問題を緩和する方法として、Portageがサポートしている Binary Package のビルドサーバー構築を行った。その大まかな手順を書き残しておく。</p>
+<h1 id="背景">背景</h1>
+<h2 id="portageの弱点">Portageの弱点</h2>
+<p>Gentoo Linuxでは、標準でPortageというパッケージマネージャを利用する。
+その大きな特徴として、パッケージインストール時に、事前にコンパイル・ビルドされたバイナリではなくソースコードを取得してきて、手元の環境でビルドすることが挙げられる。
+これにより、細かな粒度で機能の有効化・無効化を調整したり、コンパイラによる最適化の恩恵を最大限に受けることができる。</p>
+<p>一方で、手元でビルドする以上避けられない問題もある。
+まず、パッケージインストール時に消費するリソースが大きいことが挙げられる。
+ビルドする以上当然のことではあるが、Webブラウザのような巨大なソフトウェアのビルドには多くのCPU,メモリ,ストレージのリソースを消費する。
+例えばFirefoxをビルドしようと考えると、Rustがビルド時に必要となるが、このインストールに際しては7GiB以上のディスクの空きスペースが要求される。</p>
+<p>また、依存関係の解決にも苦労することがある。
+目的のパッケージをインストールするにあたって、そのビルドに必要となるパッケージもインストールしなければならないため、通常より依存関係が複雑になりやすい。
+パッケージによっては同時に環境内にインストールされることを禁じられている組み合わせもあり、これによって思うようにパッケージ更新が進まないことも多い。
+特に、しばらくシステムの更新を怠っていると、同時に多くのパッケージの更新を行う必要が出てきてしまい、こうした問題に当たりやすくなる。</p>
+<p>個人的な問題として、長い間放置していたラップトップにインストールしていたGentooのシステムを更新しようとした際に、まさにこれらの問題が大きな妨げとなった。
+数世代前のマシンのスペックで大量のパッケージをソースコードからビルドすることは大きな負担であったし、依存関係を紐解いてすべてのパッケージのバージョンを新しくしていくことは現実的でないように思えた。</p>
+<h2 id="binary-package">Binary Package</h2>
+<p>こうした問題に対する解決策の一つとして、<a href="https://wiki.gentoo.org/wiki/Binary_package_guide">Binary Package</a>が挙げられる。</p>
+<p>Binary Packageは、パッケージをビルドした後のファイルをまとめたもので、これを利用してパッケージインストールをする場合は、ソースコードをコンパイルする工程が不要となる。
+多くのLinuxディスリビューションにおいて、パッケージのインストール時には配布されているコンパイル済みのバイナリを取得してくるのによく似ているが、Portageの場合Binary Packageが配布されているわけではないため、自身でBinary Packageのビルドを行わねばならない。
+したがって、実際の活用方法は、あるホストでビルドしたものを同じ構成の別ホストに流用したり、バックアップとしてビルド済みのものを退避しておく、といったことが想定されているようだ。</p>
+<p>個人的に抱えていた古いラップトップ上のシステム更新に際しても、この方法は活用できそうだ。ラップトップ上のシステムと同等の環境を、より性能の高い別のホスト上に準備して、そちらでパッケージのビルドをすべて行ってしまい、その成果物をBinary Packageとしてラップトップに対して配布すれば良い。</p>
+<h2 id="distccとの比較">distccとの比較</h2>
+<p>また、別の案としてdistccによる分散コンパイルを行う方法も考えられる。</p>
+<p>Portageからはdistccという分散コンパイラを呼び出すことができ、コンパイルの処理の一部をリモートホストに任せることができる。ローカルホストとリモートホストでgccのバージョンを揃える必要があるなど、いくつかの注意点はあるが、比較的手軽にローカルホストの負荷軽減を期待できる方法である。</p>
+<p>ただし、ビルドそのものはローカルホストで実行することになるため、ビルド時に依存するパッケージのインストールは必要になるし、オブジェクトファイルのリンク処理などはローカルホストで実施することになる。そのため、今回はdistccを利用することはしていない。</p>
+<h2 id="sysroot">SYSROOT</h2>
+<p>Binary Packageをビルドする際には、バイナリをビルドする環境と実行する環境が異なる点に注意する必要がある。
+CPUアーキテクチャのレベルで異なればクロスコンパイルをすることになるが、例えば同じx86-64系でマイクロアーキテクチャが異なる程度であれば、同じツールチェインを用いつつコンパイルオプションを変えることになる。
+今回はマイクロアーキテクチャは異なるがアーキテクチャはx86-64で同一というケースに絞って考える。</p>
+<p>基本的には実行環境に最適化してコンパイルができれば良いのだが、ビルド時に必要なパッケージについてはビルド環境で動作することもあるため、Portageのビルド時の設定を指定する <code>make.conf</code> で一律に実行環境向けの設定を書くわけにもいかない。
+ビルド環境と実行環境で共通して動作するレベルまで最適化を控えるようにするのも手だが、せっかくGentooを使っているのだから、最適化したバイナリが得られるように工夫することを考える。</p>
+<p>実は、まさにこうした事態をPortageは想定しており、 <code>ROOT</code> <code>SYSROOT</code> <code>PORTAGE_CONFIGROOT</code> 環境変数の指定によって挙動を細かく制御できるようになっている。
+詳細は<a href="https://dev.gentoo.org/~zmedico/portage/doc/man/emerge.1.html">manにも記載がある</a>。
+これを利用することで、別のホストに最適化したBinary Packageをビルドすることが可能となる。</p>
+<h1 id="手順">手順</h1>
+<h2 id="ビルドサーバーの準備">ビルドサーバーの準備</h2>
+<p>試行錯誤することが予想されたこともあって、環境の再作成が容易なようにDockerコンテナを使った。
+適当に用意したそこそこのスペックのサーバー上で <code>gentoo/portage</code> イメージとvolumeを共有する形で <code>gentoo/stage3</code> のイメージを動かし、これをビルド環境として <code>docker exec</code> にて作業することにした。
+（イメージの詳細については <a href="https://github.com/gentoo/gentoo-docker-images">https://github.com/gentoo/gentoo-docker-images</a> を参照）</p>
+<p>ビルド環境内には <code>/alt</code> というディレクトリを作って、Binary Package向けの各種設定や成果物の配置先として使う。
+これは、前述の <code>ROOT</code> <code>SYSROOT</code> <code>PORTAGE_CONFIGROOT</code> で指定する。
+例えば <code>ROOT=/alt SYSROOT=/ PORTAGE_CONFIGROOT=/alt</code> のようにすることで、<code>/alt/etc/portage/make.conf</code> などが <code>make.conf</code> として参照されることになり、 <code>/alt/usr</code> 以下にライブラリや実行ファイルがインストールされるようになるが、ビルド時の依存の都合でビルド環境用にインストールされるものについては、通常通り <code>/etc/portage/make.conf</code> を参照した上で <code>/usr</code> 以下にライブラリや実行ファイルはインストールされることになる。</p>
+<p>この <code>/alt</code> 以下にBinary Packageも保持されるので、volumeを介してsshd用のコンテナにもマウントさせ、SSH経由でアクセス可能な状態を作る。（sshd用コンテナにはrsyncも入れておく。）</p>
+<p>細かい部分は後ほど補足するが、これらを実現するために以下のようなdocker-compose.ymlを利用した。</p>
+<pre tabindex="0"><code>version: &#34;3.9&#34;
+services:
+  gentoo:
+    image: &#34;gentoo/stage3:latest&#34;
+    volumes:
+      - &#34;repos:/var/db/repos&#34;
+      - &#34;gentoo:/var/db/repos/gentoo:ro&#34;
+      - &#34;altroot:/alt/&#34;
+      - &#34;./base/make.conf:/etc/portage/make.conf:ro&#34;
+      - &#34;./base/package.use:/etc/portage/package.use/manual:ro&#34;
+      - &#34;./alt/make.conf:/alt/etc/portage/make.conf:ro&#34;
+      - &#34;./alt/package.use:/alt/etc/portage/package.use/manual:ro&#34;
+    command: [&#34;tail&#34;, &#34;-f&#34;]
+    cap_add:
+      - ALL
+    environment:
+      ROOT: /alt/
+      SYSROOT: /
+      PORTAGE_CONFIGROOT: /alt/
+      SYMLINK_LIB: &#34;no&#34;
+  portage:
+    image: &#34;gentoo/portage:latest&#34;
+    volumes:
+      - &#34;gentoo:/var/db/repos/gentoo&#34;
+    command: [&#34;/bin/true&#34;]
+  ssh:
+    image: lscr.io/linuxserver/openssh-server
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Tokyo
+      - PUBLIC_KEY=ecdsa-sha2-nistp256 AAA...
+      - SUDO_ACCESS=true
+      - PASSWORD_ACCESS=false
+      - USER_NAME=gentoo
+    volumes:
+      - &#34;altroot:/alt/:ro&#34;
+      - &#34;repos:/var/db/repos:ro&#34;
+      - &#34;gentoo:/var/db/repos/gentoo:ro&#34;
+    ports:
+      - 22:2222
+    restart: unless-stopped
+volumes:
+  repos:
+  gentoo:
+  altroot:
+</code></pre><h2 id="リポジトリの設定">リポジトリの設定</h2>
+<p>portageによるパッケージインストールで選択されるパッケージバージョンと、Binary Packageのバージョンは一致している必要があるので、クライアント（Binary Packageのインストール先になるホスト）側はBinary Packageのビルドサーバーがローカルに同期したディレクトリをリポジトリとして参照するのが望ましい。
+そのため、クライアント側の <code>/etc/portage/repos.conf</code> は、</p>
+<pre tabindex="0"><code>[gentoo]
+location = /var/db/repos/portage
+sync-type = rsync
+sync-uri = ssh://gentoo@build-server/var/db/repos/gentoo
+</code></pre><p>のような内容にする。</p>
+<p>（このとき、SSHのポートとして22以外を使う場合、URIの中で指定しても正しく認識されないため、22を使うようにしたい。その場しのぎではあるが、emergeを呼び出すときに <code>PORTAGE_SSH_OPTS='-o Port=10022'</code> のようにすれば、一応指定はできる。）</p>
+<p>また、overlayを利用する場合は、overlayの設定をビルドサーバーで行った上で、同様にクライアント側はビルドサーバーのディレクトリを参照する。
+overlayの追加（例えば <code>haskell</code> overlayを追加する場合）は以下のような流れになる。</p>
+<pre tabindex="0"><code>ROOT=/ SYSROOT=/ PORTAGE_CONFIGROOT=/ emerge eselect-repository
+eselect repository enable haskell
+ROOT=/ SYSROOT=/ PORTAGE_CONFIGROOT=/ emerge dev-vcs/git
+ROOT=/ SYSROOT=/ PORTAGE_CONFIGROOT=/ emerge --sync haskell
+</code></pre><h2 id="profileの変更">profileの変更</h2>
+<p><code>sys-apps/systemd</code> と <code>sys-fs/udev</code> はconflictを起こすため同時にシステムには入れられず、かつ他のパッケージからの依存によりビルド環境にインストールされる可能性が高い。
+ビルド環境として利用する前述のコンテナイメージにはudevがインストールされているが、Binary Packageとしてsystemdやsystemd依存のパッケージをビルドしたい場合は、先にビルド環境内をudevからsystemdに切り替えておくほうが良い。
+そのため、systemd用のプロファイルに <code>eselect profile</code> などで切り替えた上で、</p>
+<pre tabindex="0"><code>ROOT=/ SYSROOT=/ PORTAGE_CONFIGROOT=/ emerge -ND world
+</code></pre><p>のようにしてudevからsystemdに切り替える。</p>
+<h2 id="設定のコピー">設定のコピー</h2>
+<p>パッケージビルド時の細かな粒度での設定を表す &ldquo;USEフラグ&rdquo; について、クライアント側でemergeコマンド実行時に選択されるものと、Binary Packageのビルド時に選択されているものは、一致している必要がある。
+そのため、USEフラグの決定に関わる設定について、クライアント側とビルドサーバー側で統一しておかねばならない。
+具体的には、 <code>/etc/portage/package.use</code> 配下のファイルと、 <code>/etc/portage/make.conf</code> 内の一部の設定（ <code>USE</code> 変数など）である。</p>
+<p>これらのファイルをビルドサーバーの <code>/alt</code> 以下に保存する。（例えば <code>/etc/portage/make.conf</code> であれば、 <code>/alt/etc/portage/make.conf</code> のようなパスで保存する。）</p>
+<p>ビルドサーバーの <code>/alt/etc/portage/make.conf</code> は以下のような内容になる。</p>
+<pre tabindex="0"><code>COMMON_FLAGS=&#34;-O2 -pipe -march=haswell -mmmx -msse -msse2 -msse3 -mssse3 -mcx16 -msahf -mmovbe -maes -mpclmul -mpopcnt -mabm -mfma -mbmi -mbmi2 -mavx -mavx2 -msse4.2 -msse4.1 -mlzcnt -mrdrnd -mf16c -mfsgsbase -mfxsr -mxsave -mxsaveopt --param l1-cache-size=32 --param l1-cache-line-size=64 --param l2-cache-size=3072 -mtune=haswell -fstack-protector-strong&#34;
+CFLAGS=&#34;${COMMON_FLAGS}&#34;
+CXXFLAGS=&#34;${COMMON_FLAGS}&#34;
+FCFLAGS=&#34;${COMMON_FLAGS}&#34;
+FFLAGS=&#34;${COMMON_FLAGS}&#34;
+
+CHOST=&#34;x86_64-pc-linux-gnu&#34;
+MAKEOPTS=&#34;-j8&#34;
+FEATURES=&#34;parallel-fetch buildpkg -ipc-sandbox -mount-sandbox -network-sandbox -pid-sandbox&#34;
+
+PORTDIR=&#34;/var/db/repos/gentoo&#34;
+DISTDIR=&#34;/alt/var/cache/distfiles&#34;
+PKGDIR=&#34;/alt/var/cache/binpkgs&#34;
+
+LC_MESSAGES=C
+
+USE=&#34;acpi alsa -bindist ...&#34;
+LINGUAS=&#34;ja&#34;
+INPUT_DEVICES=&#34;evdev&#34;
+VIDEO_CARDS=&#34;intel i965&#34;
+</code></pre><p><code>COMMON_FLAGS</code> は、実際にBinary Packageのインストール先として想定しているホストに最適化するように調整している。
+<code>FEATURES</code> について、 <code>buildpkg</code> はBinary Packageをビルドするオプションで、CLIで <code>-b</code> 指定するのと同等である。 <code>-*-sandbox</code> は環境によっては不要なものだが、今回のようにコンテナ内でemergeを動かす場合は必要になる。
+<code>USE</code> 以下はBinary Packageのインストール先で利用するものを取ってきたものになる。</p>
+<p>なお、ビルドサーバーの <code>/etc/portage/make.conf</code> は以下のような内容にする。</p>
+<pre tabindex="0"><code>COMMON_FLAGS=&#34;-O2 -pipe -march=native&#34;
+CFLAGS=&#34;${COMMON_FLAGS}&#34;
+CXXFLAGS=&#34;${COMMON_FLAGS}&#34;
+FCFLAGS=&#34;${COMMON_FLAGS}&#34;
+FFLAGS=&#34;${COMMON_FLAGS}&#34;
+
+CHOST=&#34;x86_64-pc-linux-gnu&#34;
+MAKEOPTS=&#34;-j8&#34;
+FEATURES=&#34;-ipc-sandbox -mount-sandbox -network-sandbox -pid-sandbox&#34;
+
+PORTDIR=&#34;/var/db/repos/gentoo&#34;
+DISTDIR=&#34;/var/cache/distfiles&#34;
+PKGDIR=&#34;/var/cache/binpkgs&#34;
+
+LC_MESSAGES=C
+</code></pre><p><code>COMMON_FLAGS</code> は、この設定でコンパイルされるバイナリはビルドサーバー内で動作するものであるため、 <code>-march=native</code> となっている。</p>
+<p>また、これらに加えて <code>/var/lib/portage/world</code> をコピーしておくことで、利用しているパッケージをビルドサーバーで再構築できる。</p>
+<h2 id="binary-packageのビルド">Binary Packageのビルド</h2>
+<pre tabindex="0"><code>ROOT=/alt SYSROOT=/ PORTAGE_CONFIGROOT=/alt emerge -abvND world
+</code></pre><p>を実行する。 <code>-b</code> は Binary Packageをビルドするオプションである。</p>
+<p>多くの場合、依存関係の都合でpackage.useを更新することになると思うが、 <code>etc-update</code> を呼ぶ場合、 <code>/alt/etc/portage/package.use</code> 配下の更新であれば</p>
+<pre tabindex="0"><code>ROOT=/alt etc-update
+</code></pre><p>とし、 <code>/etc/portage/package.use</code> 配下の更新であれば</p>
+<pre tabindex="0"><code>ROOT=/ etc-update
+</code></pre><p>とする。</p>
+<h3 id="細かい話">細かい話</h3>
+<p><code>acct-group/root-0</code> について、事前に <code>root</code> グループがないとインストールに失敗する。
+今回 <code>ROOT</code> <code>SYSROOT</code> など分けている都合で、 <code>/alt</code> に chroot した環境では <code>root</code> グループがないような状態になってしまっており、エラーになっていた。</p>
+<pre tabindex="0"><code>echo &#39;root:x:0:root&#39; &gt;&gt; /alt/etc/group
+</code></pre><p>のようにして回避した。</p>
+<h2 id="binary-packageのインストール">Binary Packageのインストール</h2>
+<p>ここまでくれば、後はBinary Packageを利用するだけとなる。
+クライアントにて、 <code>PORTAGE_BINHOST</code> を指定してemergeを呼び出す。 <code>-G</code> オプションによってBinary Packageを使用するようになる。</p>
+<pre tabindex="0"><code>PORTAGE_BINHOST=&#39;ssh://gentoo@build-server/alt/var/cache/binpkgs&#39; emerge -aGuvND world
+</code></pre><h1 id="問題点">問題点</h1>
+<p>いくつかの課題もある。</p>
+<ul>
+<li>USEフラグに関わる設定を共有する必要があるが、その部分が洗練されていない
+<ul>
+<li>現状は手でコピーするような手順であり、繰り返しの実行には向かない</li>
+<li>NFSで共有したり、gitで共有したり、色々やり方はあると思うが、いずれも泥臭くやらねばならなさそう</li>
+<li>そもそもクライアント側ではBinary Packageをインストールするだけなら、ビルドサーバーで設定をいじってクライアントはemerge時にそれらを参照さえできれば良いかもしれないし、そうしたワークフローの変更も視野に入れて良い方法を考えたい</li>
+</ul>
+</li>
+<li>ROOT, SYSROOT を分けてのビルド・インストールが安定していない
+<ul>
+<li><code>acct-group/root-0</code> の例のように、ニッチなことをしているせいでうまくいかないケースを踏みがち</li>
+</ul>
+</li>
+<li>ビルドサーバー構築手順の簡略化
+<ul>
+<li>docker-compose.ymlに完結するとかして、極力execで叩くものを減らしたい</li>
+</ul>
+</li>
+</ul>
+
+</article>
+<nav class="no-print post-nav">
+
+	<a class="prev-post" href="https://ntoofu.github.io/blog/post/docker-to-vsphere/">
+        <img class="icon-text" src="https://ntoofu.github.io/blog/img/prev.svg"/>DockerコンテナイメージをvSphere仮想マシンイメージに変換する</a>
+
+
+</nav>
+
+
+
+
+			<hr class="sep" />
+		</main>
+		<footer class="container no-print">
+			<div class="u-footer">
+				
+
+<a href="https://github.com/ntoofu/"><img class="icon-social" src="https://ntoofu.github.io/blog/img/github.svg" alt="Github"/></a>
+
+
+<a href="https://twitter.com/ntoofu"><img class="icon-social" src="https://ntoofu.github.io/blog/img/twitter.svg" alt="Twitter"/></a>
+
+<a href="https://ntoofu.github.io/blog/index.xml" target="_blank"><img class="icon-social" src="https://ntoofu.github.io/blog/img/feed.svg" alt="Feed"></a>
+
+				<p>
+					
+					Theme used: <a href="https://github.com/yursan9/manis-hugo-theme">Manis</a><br>
+					
+					
+					&copy; 2018 ntoofu
+					
+					
+				</p>
+				
+				<a href="#brand">
+                    <img class="icon-text" src="https://ntoofu.github.io/blog/img/toup.svg" alt="To Up"/>
+					<span>Back to Up</span>
+				</a>
+				
+			</div>
+		</footer>
+		
+	</body>
+</html>
+
