@@ -8,6 +8,30 @@
     <copyright>&amp;copy; 2018 ntoofu</copyright>
     <lastBuildDate>Fri, 04 Jan 2019 00:17:21 +0900</lastBuildDate><atom:link href="https://ntoofu.github.io/blog/post/index.xml" rel="self" type="application/rss+xml" />
     <item>
+      <title>Topotestsを利用してルーティングについて勉強する</title>
+      <link>https://ntoofu.github.io/blog/post/how-to-learn-routing-with-topotests/</link>
+      <pubDate>Thu, 23 Jun 2022 00:00:00 +0000</pubDate>
+      
+      <guid>https://ntoofu.github.io/blog/post/how-to-learn-routing-with-topotests/</guid>
+      <description>ルーティングについての社内輪読会の発表のために、デモ環境の構築を Topotests で実施し、とても便利だったので紹介する。
+背景 デモ環境について ルーティングプロトコルについて学ぶ中で、実際に動かしてその動作を確かめたいと考えることもあると思う。 実際に設定をして期待したとおりに経路情報が伝播するのか、障害時に代替の経路に切り替わってくれるのか、やり取りされるパケットの中身がどのようになっているのかなど、見たい部分もたくさんあるだろう。
+しかし、複雑なルーティングプロトコルの動きを見るためには、ルーターが複数台(それも2,3台ではなく5台以上)欲しくなってくるのはほぼ間違いない。 これらを物理機器として準備するのは場合によっては難しく、x86などの一般的なコンピューター上でソフトウェアとして動作するもの（いわゆる仮想ルーター）を使うほうが、ハードルが低い。
+ただし、ソフトウェア的に環境を作る場合、ネットワークのトポロジを模擬する部分に工夫が必要になってくる。 例えば、ルーター1つごとに仮想マシンを立てて複数の仮想NICを割り当てたり、コンテナなどのLinuxのNamespaceの機能とvethやbridgeなどの仮想ネットワーク機能を上手く使うといった具合だ。 そうなってくると、結局ソフトウェア的に環境を作るのも、相応の手間が必要になってしまう。
+Topotests こうした問題を解消できる一つの方法として、Topotests を利用する方法がある。
+Topotestsは、FRRouting(FRR)というLinux/Unixで動作するオープンソースのルーティングプロトコルスイートのプロジェクトの中で、そのテストを行うためのライブラリである。 前述のLinuxのNamespaceの機能と仮想ネットワーク機能を利用して、ネットワークトポロジを再現し、ビルドしたFRRを動作させ、期待する動作をするか（正しくルートが学習されるか、メモリリークがないか等）というテストを、Topotestsによって実現している。 （トポロジ再現のキモは micronet という部分に集約されており、見ての通りiproute2コマンドを組み立てて実行している。）
+Topotestsを用いたテストのために準備するトポロジの定義は、Pythonのコードの中に書くこともできるが、トポロジを定義したJSONファイルを用意することもできる。 多くのルーターとその間のリンクを定義すること考えると、Pythonのコードとして定義したほうがループなどの制御構文が利用できて簡単にも思えるが、ルーティング用のデーモンに渡す設定ファイルを別途準備する必要もあるため、意外と面倒になる。 JSONファイルで準備する場合、それらの設定まで同じJSONの中で表現できるため、総じて見るとよりシンプルになる。
+また、ドキュメントの中にも書かれている通り、--topology-only オプションを指定すれば、ネットワークトポロジの再現とFRRを動作させるところまで実行しつつ、テストは実施しないようにもできる。
+したがって、Topotestsを使えば、JSONで定義したネットワークトポロジを、FRRとLinuxのNamespaceと仮想ネットワーク機能を用いて再現することができるということになる。
+手順 コンテナの用意 FRR自体のテストのためではなく、ルーティングの学習用に任意のトポロジを再現するためにTopotestsを使うという観点で考えると、現時点 では、UbuntuベースのDockerイメージをビルドして用いるのが良い。 (Dockerhubの frrouting/frr イメージは、pytest等のライブラリが入っていないため、ドキュメントに書かれているような方法でTopotestsを実行できないため。 frrouting/topotests というイメージもあるが、都度FRRをソースコードからビルドすることを前提としており、FRR自体のテストを考えていないのであればむしろ使いにくいと思う。)
+ビルドはFRRのリポジトリのルートでdocker buildすれば良いだけ。
+git clone https://github.com/FRRouting/frr cd frr docker build -t frr -f docker/ubuntu20-ci/Dockerfile . トポロジとテストの準備 トポロジを定義したJSONファイルを用意する。 ドキュメントや、Gitリポジトリ内のTopotestsを利用したテストで使っているJSONファイルを参考にすると良い。
+また、そのトポロジを読み込むテストを用意する。 exampleの中にあるものを参考に作ると手っ取り早い。 テストケースが無いと、pytest経由で呼び出したときに実行するテストがないとみなされ何もせずに終了してしまうので、中身は空でも良いので test_ で始まる関数を1つは用意する。
+例えば、こんな感じ。
+実行 準備ができたら、用意したファイルをマウントしつつ先にビルドしたコンテナを実行する。
+docker run -v $PWD:/home/frr/frr/tests/topotests/mytest:ro --privileged --rm -it frr /bin/bash あとは、コンテナ内で</description>
+    </item>
+    
+    <item>
       <title>Gentoo Linux で (Portageで) パッケージビルドサーバーを使う</title>
       <link>https://ntoofu.github.io/blog/post/gentoo-binpkg/</link>
       <pubDate>Sun, 01 May 2022 00:00:00 +0000</pubDate>
@@ -40,10 +64,10 @@ SYSROOT Binary Packageをビルドする際には、バイナリをビルドす�
       <description>Dockerでコンテナイメージをビルドしてから変換することで、仮想マシンイメージを作成することができたので、その方法を説明する。
 背景 ソフトウェア動作環境として、仮想マシンよりもコンテナを利用することのほうが最近は一般的になっており、 技術の流行に従えば、あえてコンテナを仮想マシンに変換するようなことは必要ないようにも思われるかもしれない。 確かに、DevOpsのサイクルを高速に回す上で、コンテナの軽量さはメリットであるし、 Kubernetesのようにデプロイを含めたライフサイクルを管理するツールがあるため、 Continuous Deploymentを導入しやすいという点も大きい。 （このあたりは、その軽量さも相まって仮想マシンに比べImmutable Infrastructureに向いていることが影響していると思う。）
 しかしながら、以下のような理由により、仮想マシンを使い続ける場面も多くある。
- ネットワークの要件により、コンテナとしてデプロイすることが難しいことがある  物理機器とのL2での疎通性が必要な場合など CNIプラグインによりコンテナでも理屈の上では実現できることも多いが、ファイアウォールを適用することに難があったり、パフォーマンス上の懸念も残るなど、直ちに実用できるとは言い難い   既存の資産の有効活用  仮想マシンを前提に出来上がった運用があると、移行コストがかさむため、直ちにコンテナ化するとは限らない    とはいえ、仮想マシンのイメージのビルドは、コンテナのイメージのビルドに比較すると、通常手間がかかるのも事実である。 仮想マシンをデプロイし、SSHなどを利用してパッケージのインストールなどのプロビジョニングを実施するため、 オーバーヘッドも避けられない上に、そもそも仮想マシンをデプロイする環境がないとビルドできない。
+ネットワークの要件により、コンテナとしてデプロイすることが難しいことがある 物理機器とのL2での疎通性が必要な場合など CNIプラグインによりコンテナでも理屈の上では実現できることも多いが、ファイアウォールを適用することに難があったり、パフォーマンス上の懸念も残るなど、直ちに実用できるとは言い難い 既存の資産の有効活用 仮想マシンを前提に出来上がった運用があると、移行コストがかさむため、直ちにコンテナ化するとは限らない とはいえ、仮想マシンのイメージのビルドは、コンテナのイメージのビルドに比較すると、通常手間がかかるのも事実である。 仮想マシンをデプロイし、SSHなどを利用してパッケージのインストールなどのプロビジョニングを実施するため、 オーバーヘッドも避けられない上に、そもそも仮想マシンをデプロイする環境がないとビルドできない。
 そこで、ビルドを簡略化しようという狙いで、Dockerコンテナイメージをビルドし、 それを仮想マシンのイメージに変換するということをやってみた。
 手順 PoC https://github.com/ntoofu/docker-to-vsphere
- build.sh を実行し、生成される build/vm.ovf をインポートすればOK （手順の詳細はこのリポジトリの中身を見たほうが良いかもしれない）  内容  alpine などのディストリビューションのイメージをもとに、通常通りDockerfileを作ってコンテナビルドするが、以下の工夫をする  Linux kernelをインストールする  apk add linux-virt   /etc/fstab /boot/grub/grub.cfg をイメージに追加する OpenRCや、関連して必要になるパッケージを追加する  openrc busybox-initscripts e2fsprogs   システム的に必要なサービスの自動起動設定をする   docker build  試していないが、 kaniko などでビルドするほうが（CI環境でdocker buildさせる場合はDocker in Dockerなどの工夫が必要になりがちで、それを避けられるため）都合がよいかもしれない   ビルドしたイメージからコンテナを作成し、そのコンテナのファイルをアーカイブファイルとして出力する  docker export でアーカイブファイルとしてコンテナ内のファイルを出力できる   dd などで空のイメージファイルを作成し、 parted などでパーティションテーブルを作成 イメージファイルに対応するloopbackデバイスを作成し、パーティションにファイルシステムを作成（フォーマット） loopbackデバイスをマウントし、その中にコンテナのアーカイブファイルを展開  後述する理由で、 .</description>
+build.sh を実行し、生成される build/vm.ovf をインポートすればOK （手順の詳細はこのリポジトリの中身を見たほうが良いかもしれない） 内容 alpine などのディストリビューションのイメージをもとに、通常通りDockerfileを作ってコンテナビルドするが、以下の工夫をする Linux kernelをインストールする apk add linux-virt /etc/fstab /boot/grub/grub.cfg をイメージに追加する OpenRCや、関連して必要になるパッケージを追加する openrc busybox-initscripts e2fsprogs システム的に必要なサービスの自動起動設定をする docker build 試していないが、 kaniko などでビルドするほうが（CI環境でdocker buildさせる場合はDocker in Dockerなどの工夫が必要になりがちで、それを避けられるため）都合がよいかもしれない ビルドしたイメージからコンテナを作成し、そのコンテナのファイルをアーカイブファイルとして出力する docker export でアーカイブファイルとしてコンテナ内のファイルを出力できる dd などで空のイメージファイルを作成し、 parted などでパーティションテーブルを作成 イメージファイルに対応するloopbackデバイスを作成し、パーティションにファイルシステムを作成（フォーマット） loopbackデバイスをマウントし、その中にコンテナのアーカイブファイルを展開 後述する理由で、 .dockerenv boot/boot を exclude grub-install により、grub2をインストールする qemu-imgで streamOptimized な vmdk ファイルに変換 OVFファイルを作成する 補足 OpenRCは rc_sys という設定項目があり、未設定の場合、動作環境を検出し、Dockerコンテナ内と判定された場合、一部サービスが起動しなくなる /.</description>
     </item>
     
     <item>
@@ -77,10 +101,12 @@ fstrim HDDのような記録媒体であれば、前述のようにわざわざ�
       <description>先日プロフェッショナルSSL/TLS を読み、 社内勉強会でTLSについて話した。 その際、ブラウザと各Webサイトの間で実際どのようにTLSのハンドシェイクがなされているかを説明するために、 ブラウザのTLS通信をパケットキャプチャしたのだが、うまくキャプチャするのに多少工夫したので、 そのことをこの記事では説明する。
 （普段からLinuxデスクトップを利用しているので、Linuxを前提とする。）
 背景 パケットキャプチャそのものはブラウザを実行するホスト上で tcpdump などを使えば容易に実行できるが、 ブラウザからのTLS通信をキャプチャする場合、次の問題がある。
- 暗号化されているため、中身が確認できない  特にTLS 1.3では、1.2以前は平文だったようなハンドシェイク途中のメッセージも暗号化されているものがある TLSのハンドシェイクそのものだけでなく、上位プロトコル(HTTPなど)の内容も確認したい場合は、復号が必須   関心のあるTLSのセッションだけを選択してキャプチャすることが難しい  送信先IPアドレスは特定困難  WebサイトのIPアドレスはDNSラウンドロビン等で複数から選んで使っている可能性があって、変動する サイト内の一部のコンテンツがサブドメインにあったりCDNを利用していて、送信先アドレスがまちまち   キャプチャに使うホスト上で、関係ないプログラムも同じポートやプロトコルを使うため、判別が困難  TCP 443宛やTLSプロトコルを使っているという条件では、キャプチャしたいブラウザ以外からの通信が混ざる      方法 本題となるキャプチャ方法だが、ここでは以下の3つについて説明する。
- SSLKEYLOGFILEを活用し、パケット復号する方法 netnsを活用し、特定プロセスのみを対象にしてパケットキャプチャする方法 NFLOGを活用し、特定プロセスのみを対象にしてパケットキャプチャする方法  2番目と3番目に関しては、どちらかを選んで使えばよい。 （先日の社内勉強会のためにキャプチャしたときは、1+3の方法で実施した。）
+暗号化されているため、中身が確認できない 特にTLS 1.3では、1.2以前は平文だったようなハンドシェイク途中のメッセージも暗号化されているものがある TLSのハンドシェイクそのものだけでなく、上位プロトコル(HTTPなど)の内容も確認したい場合は、復号が必須 関心のあるTLSのセッションだけを選択してキャプチャすることが難しい 送信先IPアドレスは特定困難 WebサイトのIPアドレスはDNSラウンドロビン等で複数から選んで使っている可能性があって、変動する サイト内の一部のコンテンツがサブドメインにあったりCDNを利用していて、送信先アドレスがまちまち キャプチャに使うホスト上で、関係ないプログラムも同じポートやプロトコルを使うため、判別が困難 TCP 443宛やTLSプロトコルを使っているという条件では、キャプチャしたいブラウザ以外からの通信が混ざる 方法 本題となるキャプチャ方法だが、ここでは以下の3つについて説明する。
+SSLKEYLOGFILEを活用し、パケット復号する方法 netnsを活用し、特定プロセスのみを対象にしてパケットキャプチャする方法 NFLOGを活用し、特定プロセスのみを対象にしてパケットキャプチャする方法 2番目と3番目に関しては、どちらかを選んで使えばよい。 （先日の社内勉強会のためにキャプチャしたときは、1+3の方法で実施した。）
 SSLKEYLOGFILEを活用し、パケット復号する方法 SSLKEYLOGFILE で調べると説明しているところがたくさんあるので、細かい手順は省くが、要約すれば
- ブラウザを SSLKEYLOGFILE 環境変数にファイルパスを指定した状態で起動する すると SSLKEYLOGFILE で指定されたパスのファイルにTLSセッションごとの鍵に関するパラメタが記録される このファイルをパケットキャプチャと合わせてWiresharkに読み込ませると、TLSセッションを復号してくれる  設定箇所: 編集(Edit) -&amp;gt; 設定(Preferences) -&amp;gt; Protocols -&amp;gt; TLS -&amp;gt; (Pre)-Master-Secret log filename    ということになる。TLSクライアント機能を有する任意のソフトウェアで同じ手法が使えるわけではないが、FirefoxやGoogle Chromeなどの主要ブラウザでは使える方法であるらしい。（もちろん、ブラウザのバージョンやビルドオプション等にも依存するとは思うが）</description>
+ブラウザを SSLKEYLOGFILE 環境変数にファイルパスを指定した状態で起動する すると SSLKEYLOGFILE で指定されたパスのファイルにTLSセッションごとの鍵に関するパラメタが記録される このファイルをパケットキャプチャと合わせてWiresharkに読み込ませると、TLSセッションを復号してくれる 設定箇所: 編集(Edit) -&amp;gt; 設定(Preferences) -&amp;gt; Protocols -&amp;gt; TLS -&amp;gt; (Pre)-Master-Secret log filename ということになる。TLSクライアント機能を有する任意のソフトウェアで同じ手法が使えるわけではないが、FirefoxやGoogle Chromeなどの主要ブラウザでは使える方法であるらしい。（もちろん、ブラウザのバージョンやビルドオプション等にも依存するとは思うが）
+軽く調べた感じだと、以下のような事情になっているらしい。
+SSLのライブラリであるNSSには、デバッグ用にTLSセッションを複合するのに必要な鍵情報をSSL key log fileとして吐き出す機能がある SSLKEYLOGFILE 環境変数が設定されているとき、それが示すファイルパスに定められたフォーマットでpremaster secret等を出力する よってNSSをバックエンドにするソフトウェアではこの方法が使えるはず TLSに関するソフトウェアのいくつかが、このSSL key log fileをサポートしている キャプチャしたパケット解析に広く使われるWiresharkでは、このSSL key log fileを使ってパケットの復号をする機能をサポートしている ちなみに、NSSを使うソフトウェアだけでなく、OpenSSLなども同じフォーマットのSSL key logを受け取るコールバック関数がある NSSのように SSLKEYLOGFILE 環境変数をライブラリ側で読み取ってファイルに吐き出すところまではやってくれなさそう netnsを活用し、特定プロセスのみを対象にしてパケットキャプチャする方法 netns ことnetwork namespaceというLinuxの機能を使うことで、 Linuxカーネルのネットワークスタックは仮想的に分離できる。</description>
     </item>
     
     <item>
@@ -90,7 +116,7 @@ SSLKEYLOGFILEを活用し、パケット復号する方法 SSLKEYLOGFILE で調�
       
       <guid>https://ntoofu.github.io/blog/post/k8s-pod-connected-to-vlan-by-bridge-cni/</guid>
       <description>この記事は富士通クラウドテクノロジーズ Advent Calendar 2020の21日目の記事です。
-TL;DR  KubernetesでPodを外部のVLANを利用したネットワークと接続したい場合の一つの方法を検証した Multus CNI と bridge CNI pluginを活用する 都度ノードを自ら設定したりする必要はなく、manifestを適切に与えるだけでPodを好きなVLANに直接(L2レベルでの疎通がある状態で)繋げられるようになる  背景 PodをVLANに繋ぎたい動機 業務ではインフラの管理を中心に担当しているが、IaaSとしてサービス提供している環境（いわばクラウドの裏側）の管理であり、クラウド上のシステムではないため、泥臭いことを沢山する必要がある。例えばDHCPサーバーを構築してホストのアドレスを管理できるようにしたり、ユーザーに提供しているサーバーインスタンスが利用するネットワーク機能（ファイアウォール、ロードバランサー、VPN等）を提供することなどがある。
+TL;DR KubernetesでPodを外部のVLANを利用したネットワークと接続したい場合の一つの方法を検証した Multus CNI と bridge CNI pluginを活用する 都度ノードを自ら設定したりする必要はなく、manifestを適切に与えるだけでPodを好きなVLANに直接(L2レベルでの疎通がある状態で)繋げられるようになる 背景 PodをVLANに繋ぎたい動機 業務ではインフラの管理を中心に担当しているが、IaaSとしてサービス提供している環境（いわばクラウドの裏側）の管理であり、クラウド上のシステムではないため、泥臭いことを沢山する必要がある。例えばDHCPサーバーを構築してホストのアドレスを管理できるようにしたり、ユーザーに提供しているサーバーインスタンスが利用するネットワーク機能（ファイアウォール、ロードバランサー、VPN等）を提供することなどがある。
 それら必要なものには仮想マシンとしてデプロイしているものも多くあるが、自動でダウンタイムなく安全に更新できるような構成を取れていないものも残っており、管理上負担になっている。コンポーネントによって手順も異なるため、手がかかっている。
 そこで、それらをKubernetesの上に立て直すことで、デプロイメントやアップデートの方法を共通化し、リリースサイクルを高速化していくことが出来ないかを考えている。
 しかし、KubernetesではPodのネットワークにはある程度の制約があるため、先に例に上げたようなある種の泥臭いことをKubernetes上でやろうとすると、一筋縄ではいかない。何も考えずにクラスタを構築すれば、PodはFlannelによって作られるオーバーレイネットワークのみに接続していて、DHCPによるアドレス払い出しを行うことも、ネットワーク間のパケット転送に関わることもできない。
@@ -100,11 +126,11 @@ KubernetesもこのCNIに対応していて、適切に設定することでPod�
 今回はCNIプラグインとして以下で説明するMultus CNIとbridgeプラグインを使うことで、目的を果たせることを検証していく。
 Multus CNI これも過去に少し調べて書いているが、簡単に言えば複数のCNIプラグインを呼び出せるようにするためのCNIプラグインで、コンテナ（Kubernetes的にはPod）の中に複数のネットワークインターフェイスを与えることなどが可能になる。
 bridge CNI plugin 標準的なCNIプラグインとして https://github.com/containernetworking/ の下で提供されている。主なところとしては
- Linux bridge interfaceを（無ければ）ホストに作成する コンテナが利用するnetns(network namespace)内と、ホストを結ぶLinux veth interfaceを作成する （必要に応じて）IPアドレスをnetns内のインターフェイスに割り当てる 設定によってはこのbridgeを介して外部にSNAT(Masquerade)でIPによる通信が出来るようホストを設定する  といったものになっている。直接使うことはあまりないかもしれないが、実は今なにも考えずにflannelを利用すれば(これを使ってインストールした場合)内部的にbridgeプラグインを呼び出している。
+Linux bridge interfaceを（無ければ）ホストに作成する コンテナが利用するnetns(network namespace)内と、ホストを結ぶLinux veth interfaceを作成する （必要に応じて）IPアドレスをnetns内のインターフェイスに割り当てる 設定によってはこのbridgeを介して外部にSNAT(Masquerade)でIPによる通信が出来るようホストを設定する といったものになっている。直接使うことはあまりないかもしれないが、実は今なにも考えずにflannelを利用すれば(これを使ってインストールした場合)内部的にbridgeプラグインを呼び出している。
 更にこのbridgeプラグインは、Linux bridge interfaceの vlan_filtering 利用できるようになっている。余談だが、このPRで実装されたようなので、以前検証した時にはなく、今回自分でプラグインを作成または拡張しようとして、参考にソースコードを読み込んでいて気がついた。
 これを上手く使えば、必要なネットワークの定義などをほとんどKubernetesのmanifestに完結させて行うことが出来るはずなので、それを確認していく。
 他のプラグイン https://github.com/containernetworking/plugins/ の中には、他にもプラグインがあるのでそれについても少し言及しておく。
- vlan: 今回とかなり近いことが可能だが、VLAN IDごとにvlan typeの仮想インターフェイスを作成し、それをコンテナ(厳密にはnetwork namespace)に直接渡してしまう。そのため、同一Node上で複数のPodが同一VLAN IDを利用できない。 ipvlan, macvlan: どちらもvlanと名前に含まれているが、Linuxにおけるipvlan, macvlanタイプの仮想インターフェイスのことを指しており、IEEE 802.</description>
+vlan: 今回とかなり近いことが可能だが、VLAN IDごとにvlan typeの仮想インターフェイスを作成し、それをコンテナ(厳密にはnetwork namespace)に直接渡してしまう。そのため、同一Node上で複数のPodが同一VLAN IDを利用できない。 ipvlan, macvlan: どちらもvlanと名前に含まれているが、Linuxにおけるipvlan, macvlanタイプの仮想インターフェイスのことを指しており、IEEE 802.1QのVLAN tagを付け外しすることはない。 検証 テスト用ネットワークの準備 ノード対してNICを追加し、untagされていないフレームを転送するよう(トランクポートとなるよう)スイッチを設定 画像はテスト環境に利用していたVMware vSphereのUIからのスクリーンショット</description>
     </item>
     
     <item>
@@ -114,7 +140,9 @@ bridge CNI plugin 標準的なCNIプラグインとして https://github.com/con
       
       <guid>https://ntoofu.github.io/blog/post/eclipse-titan/</guid>
       <description>TTCN-3について気になったので試してみた。
-TTCN-3 について TTCN-3 とは  通信関係のconformance testing (仕様や標準などに準拠しているかを調べるテストのこと) 用の言語のひとつ  テレコム系とかで使われていたりする？（推測）   プロトコル通りに動作するかを確かめたりするためのものなので, 通信のやり取りを柔軟に記述できる  対象とするレイヤ次第ではIPパケットやEthernetフレームのレベルで操作でき, 自由にヘッダを設定して送信したりできる 指定したパターンを満たすメッセージ(フレームやパケット等)を受け取ったら…という条件分岐も簡単に書ける    TTCN-3 の実行モデル  parallelなテスト実行をサポートしていて, 1つのテストで複数のホスト間のやり取りを記述することが出来る  componentと呼ばれるある種のオブジェクトとそのcomponent間のやりとりをテストに記述でき, componentをそれぞれ別のホストに割り当てて動作させることが出来る テスト用の実行ファイルを各テスト実行用ホスト(host controller)に配置して実行すると, 制御用ホスト(main controller)にTCP接続し, 制御用ホスト上に存在する設定ファイルに基づいてテストが実行され, テストの結果やログは制御用ホストに収集される    TTCN-3 でできそうなこと  ネットワーク機器やNFVなどが期待通りの動作をしているかのテスト  例えばファイアウォールを挟んだ2ホスト間で通信を行い, 期待通りにパケットを通過・遮断させるのか   あるプロトコルを実装したソフトウェアが, そのプロトコルでの特定のリクエスト等に対して期待した応答をするか  例えばDNSサーバーに適当なクエリを投げ, 期待した応答が得られるか  こちらの書籍の中では例としてそのような題材を扱っていた      Eclipse Titanについて  TTCN-3自体は標準化された言語であり, その処理系の1つとしてEclipse Titanが存在する その名の通りEclipse Foundation傘下のプロジェクト TTCN-3のファイルをEclipse Titanでコンパイル(トランスパイル?</description>
+TTCN-3 について TTCN-3 とは 通信関係のconformance testing (仕様や標準などに準拠しているかを調べるテストのこと) 用の言語のひとつ テレコム系とかで使われていたりする？（推測） プロトコル通りに動作するかを確かめたりするためのものなので, 通信のやり取りを柔軟に記述できる 対象とするレイヤ次第ではIPパケットやEthernetフレームのレベルで操作でき, 自由にヘッダを設定して送信したりできる 指定したパターンを満たすメッセージ(フレームやパケット等)を受け取ったら…という条件分岐も簡単に書ける TTCN-3 の実行モデル parallelなテスト実行をサポートしていて, 1つのテストで複数のホスト間のやり取りを記述することが出来る componentと呼ばれるある種のオブジェクトとそのcomponent間のやりとりをテストに記述でき, componentをそれぞれ別のホストに割り当てて動作させることが出来る テスト用の実行ファイルを各テスト実行用ホスト(host controller)に配置して実行すると, 制御用ホスト(main controller)にTCP接続し, 制御用ホスト上に存在する設定ファイルに基づいてテストが実行され, テストの結果やログは制御用ホストに収集される TTCN-3 でできそうなこと ネットワーク機器やNFVなどが期待通りの動作をしているかのテスト 例えばファイアウォールを挟んだ2ホスト間で通信を行い, 期待通りにパケットを通過・遮断させるのか あるプロトコルを実装したソフトウェアが, そのプロトコルでの特定のリクエスト等に対して期待した応答をするか 例えばDNSサーバーに適当なクエリを投げ, 期待した応答が得られるか こちらの書籍の中では例としてそのような題材を扱っていた Eclipse Titanについて TTCN-3自体は標準化された言語であり, その処理系の1つとしてEclipse Titanが存在する その名の通りEclipse Foundation傘下のプロジェクト TTCN-3のファイルをEclipse Titanでコンパイル(トランスパイル?)するとC++のコードになり, これをコンパイルしてテスト実行用のバイナリを得る…といった流れになる TTCN-3の書き方も含めて, 使い方については https://projects.eclipse.org/projects/tools.titan/downloads にまとめて公開されているPDFなどを参照するのが良い。 試してみた https://github.com/ntoofu/ttcn3-titan-experiments に試したものを置いた。以下で簡単に解説しておく。
+2つのテストを書いているが, いずれも docker-compose up すれば実行できるように書いている。
+01-tcp_syn_response graph TD subgraph mc MTC end subgraph sut nc end MTC -- SYN --&gt; nc nc -.</description>
     </item>
     
     <item>
@@ -124,7 +152,7 @@ TTCN-3 について TTCN-3 とは  通信関係のconformance testing (仕様や
       
       <guid>https://ntoofu.github.io/blog/post/vswitch_reverse_teaming/</guid>
       <description>VMware ESXi の仮想スイッチの挙動に関して同僚に質問され調べたことがあったので、軽くまとめておく。
-TL;DR  VMware ESXi の仮想スイッチではreverse teamingと呼ばれるフィルタが機能することがある たとえpromiscuous modeを有効にしていても機能するため、ミラーポート代わりにしたい時は注意が必要  前提 注意 この記事の内容はESXi 6.7に対して確認しており、それ以外については確認していない。
+TL;DR VMware ESXi の仮想スイッチではreverse teamingと呼ばれるフィルタが機能することがある たとえpromiscuous modeを有効にしていても機能するため、ミラーポート代わりにしたい時は注意が必要 前提 注意 この記事の内容はESXi 6.7に対して確認しており、それ以外については確認していない。
 NICチーミングについて 詳細はドキュメントにあるので、概要についてのみ記述する。
 仮想マシンがESXi外部と通信するために、ESXiの仮想スイッチに対してESXiホストが持つNICを割り当てる必要がある。（仮想スイッチのアップリンクと呼ばれる。） 冗長化や負荷分散のために複数のNICをこのアップリンクとして指定することができ、これをNICチーミングという。
 イメージとしてはリンクアグリゲーションが近いし、実際に対向となるスイッチでLAGの設定をしなければならない構成もあるが、LAGを設定しないでも、NICチーミングを利用できる方法も用意されている。 チーミングでは複数NICにどのように通信を分散させるかを規定したロードバランシングポリシーを選択でき、送信元の仮想マシン（正確には仮想スイッチのポート）ごとに利用する物理NICを決定したり、送信元MACアドレスから決定する方法などを選択した場合は、対向スイッチでLAGを設定する必要がない。 （むしろ、設定してはいけない。）
@@ -137,7 +165,8 @@ ESXiでのパケットキャプチャ時の注意 ESXiでは pktcap-uw コマン
 promiscuous mode と reverse teaming promiscuous mode 通常仮想スイッチはMACアドレスの学習はしないものの、仮想マシンに割り当てているMACアドレスを元に仮想マシンを特定し、仮想スイッチが受け取ったパケットの転送を行う。（イメージとしては、MACテーブルに静的にエントリが指定されており、動的な変更がないような状態での動きに近いかもしれない。）そのため、同一ポートグループを利用していたとしても他の仮想マシンへのユニキャスト通信を受け取ることは基本的に無い。
 しかし、promiscuous mode(無差別モード)が有効な場合は、そのポートグループ内の全仮想マシンにパケットが転送される。（イメージとしては、ハブの動作に近いかもしれない。）仮想マシンがL2VPNの終端になっている場合や、再仮想化などの都合で、仮想NICに割り当てられているアドレス以外のアドレスを受け取る必要がある場合などに、よく利用される。
 ただし、ESXi6.7からは分散仮想スイッチにてMACアドレス学習させるオプションが出来ているので、必要性は薄れているかもしれない。
-reverse teaming の影響 検証したところでは、promiscuous modeであるかどうかに関わらず、reverse teamingは同じように動作するらしい。 しかしこの事がかえって複雑な挙動につながることがある。</description>
+reverse teaming の影響 検証したところでは、promiscuous modeであるかどうかに関わらず、reverse teamingは同じように動作するらしい。 しかしこの事がかえって複雑な挙動につながることがある。
+promiscuous modeでは、そのポートグループ上で仮想マシンがやり取りした通信は、同一ポートグループ上の他の仮想マシンにも見えてしまうことがある。 同一ESXiホスト上であればポートグループ内の全仮想マシンに転送するため、それ自体は自然なことである。</description>
     </item>
     
     <item>
@@ -146,8 +175,8 @@ reverse teaming の影響 検証したところでは、promiscuous modeであ�
       <pubDate>Thu, 02 May 2019 00:00:00 +0000</pubDate>
       
       <guid>https://ntoofu.github.io/blog/post/research-ipvs-and-dnat/</guid>
-      <description>TL;DR  IPVSはデフォルトでconntrack(標準のconnection tracking)を利用しない そのせいでIPVSに処理させるパケットをNATしたりすると期待通り動かないことがある 必要があれば /proc/sys/net/ipv4/vs/conntrack (net.ipv4.vs.conntrack) を設定しよう  背景  iptablesの DNAT targetと IPVS(LVS/NAT構成)を共存させると上手く行かない  PREROUTING chainにおいて REDIRECT target によりポート番号をIPVSのvirtual serviceのものに変換するように設定した場合, REDIRECTされるポートに対し接続すると, 戻り通信(SYNに対するSYN+ACK)の送信元ポートがvirtual serviceのものになる（期待されるのは, 変換前のもの) (PREROUTING chainの) REDIRECT targetは内部的には DNAT と同等の動きをするようで, DNAT でも起きる   以下のようにすれば再現する   テスト用ホストでnetcatなどで適当にListenしてくれるポートを2つ作り, IPVSでバランシング設定
-(while true;do nc -l -p 1001; echo 1001; done)&amp;amp; (while true;do nc -l -p 1002; echo 1002; done)&amp;amp; ipvsadm -A -t 172.16.1.8:1000 -s rr ipvsadm -a -t 172.16.1.8:1000 -r 172.</description>
+      <description>TL;DR IPVSはデフォルトでconntrack(標準のconnection tracking)を利用しない そのせいでIPVSに処理させるパケットをNATしたりすると期待通り動かないことがある 必要があれば /proc/sys/net/ipv4/vs/conntrack (net.ipv4.vs.conntrack) を設定しよう 背景 iptablesの DNAT targetと IPVS(LVS/NAT構成)を共存させると上手く行かない PREROUTING chainにおいて REDIRECT target によりポート番号をIPVSのvirtual serviceのものに変換するように設定した場合, REDIRECTされるポートに対し接続すると, 戻り通信(SYNに対するSYN+ACK)の送信元ポートがvirtual serviceのものになる（期待されるのは, 変換前のもの) (PREROUTING chainの) REDIRECT targetは内部的には DNAT と同等の動きをするようで, DNAT でも起きる 以下のようにすれば再現する テスト用ホストでnetcatなどで適当にListenしてくれるポートを2つ作り, IPVSでバランシング設定
+(while true;do nc -l -p 1001; echo 1001; done)&amp;amp; (while true;do nc -l -p 1002; echo 1002; done)&amp;amp; ipvsadm -A -t 172.16.1.8:1000 -s rr ipvsadm -a -t 172.16.1.8:1000 -r 172.16.1.8:1001 -m ipvsadm -a -t 172.16.1.8:1000 -r 172.</description>
     </item>
     
     <item>
@@ -157,7 +186,7 @@ reverse teaming の影響 検証したところでは、promiscuous modeであ�
       
       <guid>https://ntoofu.github.io/blog/post/try-looking-glass-kvm/</guid>
       <description>Looking Glass というものを「例のグラボ」で試してみた。
-Looking Glass とは  同名のものが色々ある気がするが, 今試すのは これ  最近よく耳にするのはホログラフィックディスプレイである Looking Glassだが, これの話ではない ネットワーク関連とかだと指定したホストにICMPパケットを投げてくれるサービスをLooking Glassと 言うが, それの話でもない   KVM (Kernel-based Virtual Machine) にグラフィックスカードをPass-throughで見せているときに, そのグラフィックスカードの出力をKVMホスト上で覗き見るソフトウェア  低遅延であることが大きな特長   KVMによる仮想化環境で, 今の所ゲストがWindows10の場合にのみ利用可能  背景  Linuxデスクトップ上にKVMでWindows10をゲスト動作させ, そこでDirectXを利用するようなゲームを行う&amp;hellip; といったユースケースが主に想定される LinuxでWindowsゲームを行う場合, 以下のような選択肢が主に考えられる (Looking Glassはこの2番めの方法)  Proton  Windows APIを変換することでWindowsアプリケーションを Linux等のOSで動かそうとする Wine をforkしている Vulkan APIというクロスプラットフォームな低レイヤーのグラフィックスAPIを利用して, DirectXを実装(DXVK)することで, Linux上でDirectXを処理できるようにしている   Linux上で仮想マシンを動作させ, WindowsをゲストOSとして利用する  DirectXの処理をさせるため, ホスト上のグラフィックスカードをパススルーでゲストOSに見せる   WindowsゲームがDirectXではなくVulkanを用いて作られるようになるのを待つ   Protonについては試していないのでなんともわからないが, 仮想マシンにグラフィックスカードを パススルーする場合, そのグラフィックスカードの画面出力を利用することになる  つまり, KVMホストのLinuxでも画面出力を利用する場合は, Linux用とゲストのWindows用に 2つのディスプレイ（又は1つのディスプレイの2つの画面入力）を消費しないといけない この点を遅延をほとんど生まずに解消できるのがLooking Glassのメリット  但し, 後述の通り実際には画面の接続だけはしたほうがよかったりする      動作原理  パススルーしたグラフィックスカードのフレームバッファ（各種レンダリングの結果とも言える, 実際に画面へ出力するデータを格納している）の中身を, KVMホストから参照してKVMホスト側の GUI環境に描画する  DXGI Desktop Duplicationという, 画面キャプチャに用いるDirectX関連のAPIを使って, フレームをメインメモリ上にコピーするプログラムをゲストWindows上で動作させる ゲストOSにてメインメモリ上に取ってきたフレームは, ivshmem (Inter-VM shared memory) というKVMの機能を使って, KVMホストから参照できるようにする KVMホストのGUI環境でクライアントのソフトウェアを動作させ, ivshmemを参照してフレームを描画する    mermaid.</description>
+Looking Glass とは 同名のものが色々ある気がするが, 今試すのは これ 最近よく耳にするのはホログラフィックディスプレイである Looking Glassだが, これの話ではない ネットワーク関連とかだと指定したホストにICMPパケットを投げてくれるサービスをLooking Glassと 言うが, それの話でもない KVM (Kernel-based Virtual Machine) にグラフィックスカードをPass-throughで見せているときに, そのグラフィックスカードの出力をKVMホスト上で覗き見るソフトウェア 低遅延であることが大きな特長 KVMによる仮想化環境で, 今の所ゲストがWindows10の場合にのみ利用可能 背景 Linuxデスクトップ上にKVMでWindows10をゲスト動作させ, そこでDirectXを利用するようなゲームを行う&amp;hellip; といったユースケースが主に想定される LinuxでWindowsゲームを行う場合, 以下のような選択肢が主に考えられる (Looking Glassはこの2番めの方法) Proton Windows APIを変換することでWindowsアプリケーションを Linux等のOSで動かそうとする Wine をforkしている Vulkan APIというクロスプラットフォームな低レイヤーのグラフィックスAPIを利用して, DirectXを実装(DXVK)することで, Linux上でDirectXを処理できるようにしている Linux上で仮想マシンを動作させ, WindowsをゲストOSとして利用する DirectXの処理をさせるため, ホスト上のグラフィックスカードをパススルーでゲストOSに見せる WindowsゲームがDirectXではなくVulkanを用いて作られるようになるのを待つ Protonについては試していないのでなんともわからないが, 仮想マシンにグラフィックスカードを パススルーする場合, そのグラフィックスカードの画面出力を利用することになる つまり, KVMホストのLinuxでも画面出力を利用する場合は, Linux用とゲストのWindows用に 2つのディスプレイ（又は1つのディスプレイの2つの画面入力）を消費しないといけない この点を遅延をほとんど生まずに解消できるのがLooking Glassのメリット 但し, 後述の通り実際には画面の接続だけはしたほうがよかったりする 動作原理 パススルーしたグラフィックスカードのフレームバッファ（各種レンダリングの結果とも言える, 実際に画面へ出力するデータを格納している）の中身を, KVMホストから参照してKVMホスト側の GUI環境に描画する DXGI Desktop Duplicationという, 画面キャプチャに用いるDirectX関連のAPIを使って, フレームをメインメモリ上にコピーするプログラムをゲストWindows上で動作させる ゲストOSにてメインメモリ上に取ってきたフレームは, ivshmem (Inter-VM shared memory) というKVMの機能を使って, KVMホストから参照できるようにする KVMホストのGUI環境でクライアントのソフトウェアを動作させ, ivshmemを参照してフレームを描画する graph LR subgraph KVM_host subgraph guest_Windows agent((&#34;</description>
     </item>
     
     <item>
@@ -168,7 +197,7 @@ Looking Glass とは  同名のものが色々ある気がするが, 今試す�
       <guid>https://ntoofu.github.io/blog/post/try-multus-cni/</guid>
       <description>先日の記事でも軽くふれた Multus CNI plugin を実際に使ってみた。
 （盛んに開発されているため, 執筆時から内容が変わっている可能性があるので注意）
-Multus CNI について  CNI plugin を複数呼び出すことで, container に複数のNetwork interfaceを与えるCNI plugin Kubernetes と連携し, Pod の Manifest に応じて利用するNetworkを切り替えたりも可能  Kubernetes連携時の動作の仕組み  各ノードのCNI設定ファイル(デフォルト: /etc/cni/net.d/)を設定し, Multusが呼び出されるようにする  現時点ではDaemonSetとして作成したPodを使ってノードに対するCNI設定ファイル配置を実現している  nfvpe/multus というコンテナイメージに, 設定ファイルを配置するべきホストのディレクトリを volumeとしてマウントさせる 設定内容はコンテナ内のファイルにあるので必要に応じてdaemon用コンテナにConfigMapを volumeマウントさせる   半年ほど前に触ったときは, ホスト側の設定(/etc/cni/net.d/)を直接編集する手順が案内されていた (と思う)ので, また変わるかもしれない  軽く見た限り, Calicoやflannelも同じようなことをしていそう     各ノードにMultusを含む利用したいCNI pluginバイナリを配置しておき, KubeletがMultusを呼び出し, Multusが1つ以上のCNI pluginを呼び出す  Multus CNI pluginのバイナリ配置については前述の DaemonSet がやってくれる   Podには必ず1つ共通のネットワーク (=&amp;ldquo;Default network&amp;rdquo;) が eth0 として設定される  おそらくKubernetesのPod Networkとしての要件を満たすため   Custom Resource Definition (CRD) という Kubenetes が提供しているAPI拡張の仕組みを利用し, Default network以外のネットワークを定義し, PodはManifestにてこれを指定する Multus CNI pluginはそれ自体がKubernetes APIを呼び出し, CRDを参照してネットワークに対して どのCNI pluginをどういうconfigで呼び出すかを決定する  セットアップ ここでは, kubeadm のインストールが完了し, Kubenetesクラスタ構築直前の状態からの構築を想定する。 (Creating a single master cluster with kubeadmの, &amp;ldquo;Installing a pod network add-on&amp;rdquo; の直前の状態) 今回, Default networkにはProject Calicoを利用してみる。</description>
+Multus CNI について CNI plugin を複数呼び出すことで, container に複数のNetwork interfaceを与えるCNI plugin Kubernetes と連携し, Pod の Manifest に応じて利用するNetworkを切り替えたりも可能 Kubernetes連携時の動作の仕組み 各ノードのCNI設定ファイル(デフォルト: /etc/cni/net.d/)を設定し, Multusが呼び出されるようにする 現時点ではDaemonSetとして作成したPodを使ってノードに対するCNI設定ファイル配置を実現している nfvpe/multus というコンテナイメージに, 設定ファイルを配置するべきホストのディレクトリを volumeとしてマウントさせる 設定内容はコンテナ内のファイルにあるので必要に応じてdaemon用コンテナにConfigMapを volumeマウントさせる 半年ほど前に触ったときは, ホスト側の設定(/etc/cni/net.d/)を直接編集する手順が案内されていた (と思う)ので, また変わるかもしれない 軽く見た限り, Calicoやflannelも同じようなことをしていそう 各ノードにMultusを含む利用したいCNI pluginバイナリを配置しておき, KubeletがMultusを呼び出し, Multusが1つ以上のCNI pluginを呼び出す Multus CNI pluginのバイナリ配置については前述の DaemonSet がやってくれる Podには必ず1つ共通のネットワーク (=&amp;ldquo;Default network&amp;rdquo;) が eth0 として設定される おそらくKubernetesのPod Networkとしての要件を満たすため Custom Resource Definition (CRD) という Kubenetes が提供しているAPI拡張の仕組みを利用し, Default network以外のネットワークを定義し, PodはManifestにてこれを指定する Multus CNI pluginはそれ自体がKubernetes APIを呼び出し, CRDを参照してネットワークに対して どのCNI pluginをどういうconfigで呼び出すかを決定する セットアップ ここでは, kubeadm のインストールが完了し, Kubenetesクラスタ構築直前の状態からの構築を想定する。 (Creating a single master cluster with kubeadmの, &amp;ldquo;Installing a pod network add-on&amp;rdquo; の直前の状態) 今回, Default networkにはProject Calicoを利用してみる。</description>
     </item>
     
     <item>
@@ -178,7 +207,7 @@ Multus CNI について  CNI plugin を複数呼び出すことで, container �
       
       <guid>https://ntoofu.github.io/blog/post/container-network-interface/</guid>
       <description>社内のKubernetes勉強会で, 前より関心のあった Container Network Interface (CNI) の説明を することになった。その際の資料をここに書いておく。
-Container Network Interface (CNI) の基本 CNIとは何か  Linux container内のnetwork interfaceを設定するプラグインを書くための 仕様とライブラリからなるCNCFプロジェクト containerのネットワーク接続性を作ることと削除時の後始末だけを考えているため, 仕様は単純でサポート状況も良い(k8s専用というわけでもない) GitHub  CNIが生まれてきた背景  Linux containerが急速に発展しcontainer runtimeやオーケストレータが複数出てきた 環境依存しやすいネットワーク周りをplugableにする方法は確立されていなかった それぞれが独自に問題を解決する無駄を避けるべく, CNIが共通のインターフェイスを定める  元はと言えば rkt 用に考えられたものらしい    CNI plugins  CNIに準拠したpluginはたくさんあり, READMEにも書いてある Golangで書かれたものは多いが, CNIは言語については規定していないため何で書いても良い  CNI仕様  SPEC.mdに仕様が記されている CNI からすれば container = Linux network namespace (netns) (runtimeによりnetnsを作る単位が異なるが, CNIとしてはcontainer = network namespaceとみなす)  そもそも, Linux containerから見えるネットワークインターフェイスは コンテナ用のnetns内のinterfaceでしかない   &amp;ldquo;network&amp;rdquo; ごとに, どのpluginを用いるかなどの設定をCNIが定めるJSON形式で用意する  name: host内で一意な, networkを表す名前 type: そのnetworkで使うCNI pluginの実行ファイル名を指定 cniVersion: CNI specのバージョン ipam: I/FへのIPアドレス割り当てを管理するIPAM pluginの設定 dns: container(netns)に対するDNSを設定する その他, plugin固有の設定 (e.</description>
+Container Network Interface (CNI) の基本 CNIとは何か Linux container内のnetwork interfaceを設定するプラグインを書くための 仕様とライブラリからなるCNCFプロジェクト containerのネットワーク接続性を作ることと削除時の後始末だけを考えているため, 仕様は単純でサポート状況も良い(k8s専用というわけでもない) GitHub CNIが生まれてきた背景 Linux containerが急速に発展しcontainer runtimeやオーケストレータが複数出てきた 環境依存しやすいネットワーク周りをplugableにする方法は確立されていなかった それぞれが独自に問題を解決する無駄を避けるべく, CNIが共通のインターフェイスを定める 元はと言えば rkt 用に考えられたものらしい CNI plugins CNIに準拠したpluginはたくさんあり, READMEにも書いてある Golangで書かれたものは多いが, CNIは言語については規定していないため何で書いても良い CNI仕様 SPEC.mdに仕様が記されている CNI からすれば container = Linux network namespace (netns) (runtimeによりnetnsを作る単位が異なるが, CNIとしてはcontainer = network namespaceとみなす) そもそも, Linux containerから見えるネットワークインターフェイスは コンテナ用のnetns内のinterfaceでしかない &amp;ldquo;network&amp;rdquo; ごとに, どのpluginを用いるかなどの設定をCNIが定めるJSON形式で用意する name: host内で一意な, networkを表す名前 type: そのnetworkで使うCNI pluginの実行ファイル名を指定 cniVersion: CNI specのバージョン ipam: I/FへのIPアドレス割り当てを管理するIPAM pluginの設定 dns: container(netns)に対するDNSを設定する その他, plugin固有の設定 (e.</description>
     </item>
     
     <item>
@@ -188,7 +217,8 @@ Container Network Interface (CNI) の基本 CNIとは何か  Linux container内�
       
       <guid>https://ntoofu.github.io/blog/post/git-annex/</guid>
       <description>LWN.netの記事 で git-annex について知ったのでちょっと試してみた。
-git-annex  LWN.netの記事もそうであるように, Gitで巨大なファイルを管理する際に git-lfsと並んで名前があがることがある 大きなファイルに限らず, ファイルの実体とバージョン管理を分離することができる ユースケースについては git-annex の説明を 読むのがわかり易い  例1: バックアップ・アーカイブ用途 例2: キャッシュ的な用途（クラウドストレージにあるデータをリムーバブルメディアに持ってきて 利用した後, 書き戻す）   柔軟な制御は出来る反面面倒な部分が多い  実体の置き場を複数に分散させられるので, 分散ストレージもどきっぽくできる  置き場にはクラウドストレージ等も利用可能   保持しておくべき実体のコピーの数とかも指定できる（バックアップ用途に便利） 実体が手元にあるかないか気にする必要があるが, 裏を返せば実体は必要なものだけ持つこともできる バージョン管理はgitの流儀に従って都度自分で行うか自動でやる仕組みを整える必要がある  cronジョブを仕込むとか     ホスティングサービスの対応は薄い  GitLabでは対応を打ち切られている   ちなみに haskell で書かれている模様  検証のモチベーション  デスクトップ, ラップトップ, モバイルのデータ共有に使えないか 以下のような運用を実現したい  デスクトップは常にアクセスできるNFS上のデータにアクセスするようにしておきたい NFS上のデータは適宜クラウドストレージ(Google Drive)にバックアップとしてデータをコピーしておきたい ラップトップは自宅ではNFSのデータを使いつつ, 外出先ではローカルのデータを使い, もしローカルに無い場合はクラウドストレージからデータを持ってくるようにする  ローカルの容量が小さいので, 必要なデータだけを持ってきたい   モバイル(iOS)から参照が必要なものは都度クラウドストレージから読み出しつつ, 撮った写真とかはクラウドストレージにアップロードする   gdriveなどでrsyncライクに同期を取ることはやっていたが, 気になる部分があってやめていた  同期忘れで並行して変更が発生してしまい不整合が出たら嫌 NFSを使っている関係で書き換え発生時に自動的に同期することが出来ない    試してわかったこと 公式にwalkthroughがあるので, 参考にして色々試しつつ動きを確認した。</description>
+git-annex LWN.netの記事もそうであるように, Gitで巨大なファイルを管理する際に git-lfsと並んで名前があがることがある 大きなファイルに限らず, ファイルの実体とバージョン管理を分離することができる ユースケースについては git-annex の説明を 読むのがわかり易い 例1: バックアップ・アーカイブ用途 例2: キャッシュ的な用途（クラウドストレージにあるデータをリムーバブルメディアに持ってきて 利用した後, 書き戻す） 柔軟な制御は出来る反面面倒な部分が多い 実体の置き場を複数に分散させられるので, 分散ストレージもどきっぽくできる 置き場にはクラウドストレージ等も利用可能 保持しておくべき実体のコピーの数とかも指定できる（バックアップ用途に便利） 実体が手元にあるかないか気にする必要があるが, 裏を返せば実体は必要なものだけ持つこともできる バージョン管理はgitの流儀に従って都度自分で行うか自動でやる仕組みを整える必要がある cronジョブを仕込むとか ホスティングサービスの対応は薄い GitLabでは対応を打ち切られている ちなみに haskell で書かれている模様 検証のモチベーション デスクトップ, ラップトップ, モバイルのデータ共有に使えないか 以下のような運用を実現したい デスクトップは常にアクセスできるNFS上のデータにアクセスするようにしておきたい NFS上のデータは適宜クラウドストレージ(Google Drive)にバックアップとしてデータをコピーしておきたい ラップトップは自宅ではNFSのデータを使いつつ, 外出先ではローカルのデータを使い, もしローカルに無い場合はクラウドストレージからデータを持ってくるようにする ローカルの容量が小さいので, 必要なデータだけを持ってきたい モバイル(iOS)から参照が必要なものは都度クラウドストレージから読み出しつつ, 撮った写真とかはクラウドストレージにアップロードする gdriveなどでrsyncライクに同期を取ることはやっていたが, 気になる部分があってやめていた 同期忘れで並行して変更が発生してしまい不整合が出たら嫌 NFSを使っている関係で書き換え発生時に自動的に同期することが出来ない 試してわかったこと 公式にwalkthroughがあるので, 参考にして色々試しつつ動きを確認した。
+git-annex version: 7.20181211 インストール Gentooでは haskell リポジトリにある (余談) xmonad も同様のため自分の環境ではすんなり入れられた annexを使う準備として, 対象になるGitのworking tree内で git annex init .</description>
     </item>
     
     <item>

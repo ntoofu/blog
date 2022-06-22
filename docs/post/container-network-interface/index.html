@@ -3,11 +3,11 @@
 	<head>
 		<meta charset="utf-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<meta name="generator" content="Hugo 0.98.0" />
+		<meta name="generator" content="Hugo 0.101.0" />
 		<title>Container Network Interfaceについて調べた - ntoofu</title>
 
 		<meta name="description" content="社内のKubernetes勉強会で, 前より関心のあった Container Network Interface (CNI) の説明を することになった。その際の資料をここに書いておく。
-Container Network Interface (CNI) の基本 CNIとは何か  Linux container内のnetwork interfaceを設定するプラグインを書くための 仕様とライブラリからなるCNCFプロジェクト containerのネットワーク接続性を作ることと削除時の後始末だけを考えているため, 仕様は単純でサポート状況も良い(k8s専用というわけでもない) GitHub  CNIが生まれてきた背景  Linux containerが急速に発展しcontainer runtimeやオーケストレータが複数出てきた 環境依存しやすいネットワーク周りをplugableにする方法は確立されていなかった それぞれが独自に問題を解決する無駄を避けるべく, CNIが共通のインターフェイスを定める  元はと言えば rkt 用に考えられたものらしい    CNI plugins  CNIに準拠したpluginはたくさんあり, READMEにも書いてある Golangで書かれたものは多いが, CNIは言語については規定していないため何で書いても良い  CNI仕様  SPEC.mdに仕様が記されている CNI からすれば container = Linux network namespace (netns) (runtimeによりnetnsを作る単位が異なるが, CNIとしてはcontainer = network namespaceとみなす)  そもそも, Linux containerから見えるネットワークインターフェイスは コンテナ用のnetns内のinterfaceでしかない   &ldquo;network&rdquo; ごとに, どのpluginを用いるかなどの設定をCNIが定めるJSON形式で用意する  name: host内で一意な, networkを表す名前 type: そのnetworkで使うCNI pluginの実行ファイル名を指定 cniVersion: CNI specのバージョン ipam: I/FへのIPアドレス割り当てを管理するIPAM pluginの設定 dns: container(netns)に対するDNSを設定する その他, plugin固有の設定 (e.">
+Container Network Interface (CNI) の基本 CNIとは何か Linux container内のnetwork interfaceを設定するプラグインを書くための 仕様とライブラリからなるCNCFプロジェクト containerのネットワーク接続性を作ることと削除時の後始末だけを考えているため, 仕様は単純でサポート状況も良い(k8s専用というわけでもない) GitHub CNIが生まれてきた背景 Linux containerが急速に発展しcontainer runtimeやオーケストレータが複数出てきた 環境依存しやすいネットワーク周りをplugableにする方法は確立されていなかった それぞれが独自に問題を解決する無駄を避けるべく, CNIが共通のインターフェイスを定める 元はと言えば rkt 用に考えられたものらしい CNI plugins CNIに準拠したpluginはたくさんあり, READMEにも書いてある Golangで書かれたものは多いが, CNIは言語については規定していないため何で書いても良い CNI仕様 SPEC.mdに仕様が記されている CNI からすれば container = Linux network namespace (netns) (runtimeによりnetnsを作る単位が異なるが, CNIとしてはcontainer = network namespaceとみなす) そもそも, Linux containerから見えるネットワークインターフェイスは コンテナ用のnetns内のinterfaceでしかない &ldquo;network&rdquo; ごとに, どのpluginを用いるかなどの設定をCNIが定めるJSON形式で用意する name: host内で一意な, networkを表す名前 type: そのnetworkで使うCNI pluginの実行ファイル名を指定 cniVersion: CNI specのバージョン ipam: I/FへのIPアドレス割り当てを管理するIPAM pluginの設定 dns: container(netns)に対するDNSを設定する その他, plugin固有の設定 (e.">
 
 		<meta name="google-site-verification" content="-dM2-3-X8FeQrDaA7h-n_6oJ7drfIg3AD4AjEvr6LGw" />
 

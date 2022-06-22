@@ -3,11 +3,13 @@
 	<head>
 		<meta charset="utf-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<meta name="generator" content="Hugo 0.98.0" />
+		<meta name="generator" content="Hugo 0.101.0" />
 		<title>Eclipse TitanでTTCN-3を試した - ntoofu</title>
 
 		<meta name="description" content="TTCN-3について気になったので試してみた。
-TTCN-3 について TTCN-3 とは  通信関係のconformance testing (仕様や標準などに準拠しているかを調べるテストのこと) 用の言語のひとつ  テレコム系とかで使われていたりする？（推測）   プロトコル通りに動作するかを確かめたりするためのものなので, 通信のやり取りを柔軟に記述できる  対象とするレイヤ次第ではIPパケットやEthernetフレームのレベルで操作でき, 自由にヘッダを設定して送信したりできる 指定したパターンを満たすメッセージ(フレームやパケット等)を受け取ったら…という条件分岐も簡単に書ける    TTCN-3 の実行モデル  parallelなテスト実行をサポートしていて, 1つのテストで複数のホスト間のやり取りを記述することが出来る  componentと呼ばれるある種のオブジェクトとそのcomponent間のやりとりをテストに記述でき, componentをそれぞれ別のホストに割り当てて動作させることが出来る テスト用の実行ファイルを各テスト実行用ホスト(host controller)に配置して実行すると, 制御用ホスト(main controller)にTCP接続し, 制御用ホスト上に存在する設定ファイルに基づいてテストが実行され, テストの結果やログは制御用ホストに収集される    TTCN-3 でできそうなこと  ネットワーク機器やNFVなどが期待通りの動作をしているかのテスト  例えばファイアウォールを挟んだ2ホスト間で通信を行い, 期待通りにパケットを通過・遮断させるのか   あるプロトコルを実装したソフトウェアが, そのプロトコルでの特定のリクエスト等に対して期待した応答をするか  例えばDNSサーバーに適当なクエリを投げ, 期待した応答が得られるか  こちらの書籍の中では例としてそのような題材を扱っていた      Eclipse Titanについて  TTCN-3自体は標準化された言語であり, その処理系の1つとしてEclipse Titanが存在する その名の通りEclipse Foundation傘下のプロジェクト TTCN-3のファイルをEclipse Titanでコンパイル(トランスパイル?">
+TTCN-3 について TTCN-3 とは 通信関係のconformance testing (仕様や標準などに準拠しているかを調べるテストのこと) 用の言語のひとつ テレコム系とかで使われていたりする？（推測） プロトコル通りに動作するかを確かめたりするためのものなので, 通信のやり取りを柔軟に記述できる 対象とするレイヤ次第ではIPパケットやEthernetフレームのレベルで操作でき, 自由にヘッダを設定して送信したりできる 指定したパターンを満たすメッセージ(フレームやパケット等)を受け取ったら…という条件分岐も簡単に書ける TTCN-3 の実行モデル parallelなテスト実行をサポートしていて, 1つのテストで複数のホスト間のやり取りを記述することが出来る componentと呼ばれるある種のオブジェクトとそのcomponent間のやりとりをテストに記述でき, componentをそれぞれ別のホストに割り当てて動作させることが出来る テスト用の実行ファイルを各テスト実行用ホスト(host controller)に配置して実行すると, 制御用ホスト(main controller)にTCP接続し, 制御用ホスト上に存在する設定ファイルに基づいてテストが実行され, テストの結果やログは制御用ホストに収集される TTCN-3 でできそうなこと ネットワーク機器やNFVなどが期待通りの動作をしているかのテスト 例えばファイアウォールを挟んだ2ホスト間で通信を行い, 期待通りにパケットを通過・遮断させるのか あるプロトコルを実装したソフトウェアが, そのプロトコルでの特定のリクエスト等に対して期待した応答をするか 例えばDNSサーバーに適当なクエリを投げ, 期待した応答が得られるか こちらの書籍の中では例としてそのような題材を扱っていた Eclipse Titanについて TTCN-3自体は標準化された言語であり, その処理系の1つとしてEclipse Titanが存在する その名の通りEclipse Foundation傘下のプロジェクト TTCN-3のファイルをEclipse Titanでコンパイル(トランスパイル?)するとC&#43;&#43;のコードになり, これをコンパイルしてテスト実行用のバイナリを得る…といった流れになる TTCN-3の書き方も含めて, 使い方については https://projects.eclipse.org/projects/tools.titan/downloads にまとめて公開されているPDFなどを参照するのが良い。 試してみた https://github.com/ntoofu/ttcn3-titan-experiments に試したものを置いた。以下で簡単に解説しておく。
+2つのテストを書いているが, いずれも docker-compose up すれば実行できるように書いている。
+01-tcp_syn_response graph TD subgraph mc MTC end subgraph sut nc end MTC -- SYN --&gt; nc nc -.">
 
 		<meta name="google-site-verification" content="-dM2-3-X8FeQrDaA7h-n_6oJ7drfIg3AD4AjEvr6LGw" />
 
