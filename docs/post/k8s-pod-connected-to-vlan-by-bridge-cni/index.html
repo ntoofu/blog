@@ -3,11 +3,11 @@
 	<head>
 		<meta charset="utf-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<meta name="generator" content="Hugo 0.101.0" />
+		<meta name="generator" content="Hugo 0.98.0" />
 		<title>CNIプラグインを活用してKubernetesのPodをVLANにつなぐ - ntoofu</title>
 
 		<meta name="description" content="この記事は富士通クラウドテクノロジーズ Advent Calendar 2020の21日目の記事です。
-TL;DR KubernetesでPodを外部のVLANを利用したネットワークと接続したい場合の一つの方法を検証した Multus CNI と bridge CNI pluginを活用する 都度ノードを自ら設定したりする必要はなく、manifestを適切に与えるだけでPodを好きなVLANに直接(L2レベルでの疎通がある状態で)繋げられるようになる 背景 PodをVLANに繋ぎたい動機 業務ではインフラの管理を中心に担当しているが、IaaSとしてサービス提供している環境（いわばクラウドの裏側）の管理であり、クラウド上のシステムではないため、泥臭いことを沢山する必要がある。例えばDHCPサーバーを構築してホストのアドレスを管理できるようにしたり、ユーザーに提供しているサーバーインスタンスが利用するネットワーク機能（ファイアウォール、ロードバランサー、VPN等）を提供することなどがある。
+TL;DR  KubernetesでPodを外部のVLANを利用したネットワークと接続したい場合の一つの方法を検証した Multus CNI と bridge CNI pluginを活用する 都度ノードを自ら設定したりする必要はなく、manifestを適切に与えるだけでPodを好きなVLANに直接(L2レベルでの疎通がある状態で)繋げられるようになる  背景 PodをVLANに繋ぎたい動機 業務ではインフラの管理を中心に担当しているが、IaaSとしてサービス提供している環境（いわばクラウドの裏側）の管理であり、クラウド上のシステムではないため、泥臭いことを沢山する必要がある。例えばDHCPサーバーを構築してホストのアドレスを管理できるようにしたり、ユーザーに提供しているサーバーインスタンスが利用するネットワーク機能（ファイアウォール、ロードバランサー、VPN等）を提供することなどがある。
 それら必要なものには仮想マシンとしてデプロイしているものも多くあるが、自動でダウンタイムなく安全に更新できるような構成を取れていないものも残っており、管理上負担になっている。コンポーネントによって手順も異なるため、手がかかっている。
 そこで、それらをKubernetesの上に立て直すことで、デプロイメントやアップデートの方法を共通化し、リリースサイクルを高速化していくことが出来ないかを考えている。
 しかし、KubernetesではPodのネットワークにはある程度の制約があるため、先に例に上げたようなある種の泥臭いことをKubernetes上でやろうとすると、一筋縄ではいかない。何も考えずにクラスタを構築すれば、PodはFlannelによって作られるオーバーレイネットワークのみに接続していて、DHCPによるアドレス払い出しを行うことも、ネットワーク間のパケット転送に関わることもできない。
@@ -17,11 +17,11 @@ KubernetesもこのCNIに対応していて、適切に設定することでPod�
 今回はCNIプラグインとして以下で説明するMultus CNIとbridgeプラグインを使うことで、目的を果たせることを検証していく。
 Multus CNI これも過去に少し調べて書いているが、簡単に言えば複数のCNIプラグインを呼び出せるようにするためのCNIプラグインで、コンテナ（Kubernetes的にはPod）の中に複数のネットワークインターフェイスを与えることなどが可能になる。
 bridge CNI plugin 標準的なCNIプラグインとして https://github.com/containernetworking/ の下で提供されている。主なところとしては
-Linux bridge interfaceを（無ければ）ホストに作成する コンテナが利用するnetns(network namespace)内と、ホストを結ぶLinux veth interfaceを作成する （必要に応じて）IPアドレスをnetns内のインターフェイスに割り当てる 設定によってはこのbridgeを介して外部にSNAT(Masquerade)でIPによる通信が出来るようホストを設定する といったものになっている。直接使うことはあまりないかもしれないが、実は今なにも考えずにflannelを利用すれば(これを使ってインストールした場合)内部的にbridgeプラグインを呼び出している。
+ Linux bridge interfaceを（無ければ）ホストに作成する コンテナが利用するnetns(network namespace)内と、ホストを結ぶLinux veth interfaceを作成する （必要に応じて）IPアドレスをnetns内のインターフェイスに割り当てる 設定によってはこのbridgeを介して外部にSNAT(Masquerade)でIPによる通信が出来るようホストを設定する  といったものになっている。直接使うことはあまりないかもしれないが、実は今なにも考えずにflannelを利用すれば(これを使ってインストールした場合)内部的にbridgeプラグインを呼び出している。
 更にこのbridgeプラグインは、Linux bridge interfaceの vlan_filtering 利用できるようになっている。余談だが、このPRで実装されたようなので、以前検証した時にはなく、今回自分でプラグインを作成または拡張しようとして、参考にソースコードを読み込んでいて気がついた。
 これを上手く使えば、必要なネットワークの定義などをほとんどKubernetesのmanifestに完結させて行うことが出来るはずなので、それを確認していく。
 他のプラグイン https://github.com/containernetworking/plugins/ の中には、他にもプラグインがあるのでそれについても少し言及しておく。
-vlan: 今回とかなり近いことが可能だが、VLAN IDごとにvlan typeの仮想インターフェイスを作成し、それをコンテナ(厳密にはnetwork namespace)に直接渡してしまう。そのため、同一Node上で複数のPodが同一VLAN IDを利用できない。 ipvlan, macvlan: どちらもvlanと名前に含まれているが、Linuxにおけるipvlan, macvlanタイプの仮想インターフェイスのことを指しており、IEEE 802.1QのVLAN tagを付け外しすることはない。 検証 テスト用ネットワークの準備 ノード対してNICを追加し、untagされていないフレームを転送するよう(トランクポートとなるよう)スイッチを設定 画像はテスト環境に利用していたVMware vSphereのUIからのスクリーンショット">
+ vlan: 今回とかなり近いことが可能だが、VLAN IDごとにvlan typeの仮想インターフェイスを作成し、それをコンテナ(厳密にはnetwork namespace)に直接渡してしまう。そのため、同一Node上で複数のPodが同一VLAN IDを利用できない。 ipvlan, macvlan: どちらもvlanと名前に含まれているが、Linuxにおけるipvlan, macvlanタイプの仮想インターフェイスのことを指しており、IEEE 802.">
 
 		<meta name="google-site-verification" content="-dM2-3-X8FeQrDaA7h-n_6oJ7drfIg3AD4AjEvr6LGw" />
 
