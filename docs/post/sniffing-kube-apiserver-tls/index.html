@@ -140,6 +140,7 @@ containerd利用環境では例えば以下のようにすればすぐにわか�
 <pre tabindex="0"><code>$ sudo sh -c &#39;ls /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/*/fs/usr/local/bin/kube-apiserver&#39;
 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/3/fs/usr/local/bin/kube-apiserver
 </code></pre><h2 id="関数位置の特定">関数位置の特定</h2>
+<p><em>(2023/5/13 追記: 関数位置の特定に関しては、この節で説明する方法ではなく、<a href="https://github.com/mandiant/GoReSym">GoReSym</a> を使う方法でもっと簡単にできました。 <code>writeKeyLog</code> 関数について情報を得るには <code>-d</code> オプションが必要になる点に注意が必要です。得られた結果からアドレスを算出するには、出力されたJSONの <code>.TabMeta.VA</code> を <code>writeKeyLog</code> についての <code>Start</code> の値から引いたものに、.textセクションのアドレス <code>0x401000</code> を加えればよいです。このとき得られるのはシンボルテーブル上のアドレスに相当するものなので、ファイルオフセットを求める場合はそこから.textセクションのアドレスを引いて.textのオフセット <code>0x1000</code> を加えることになります。)</em></p>
 <p>では <code>go-bpf-gen</code> を使う準備も整ったので、早速使ってみると、以下のように上手くいきません。</p>
 <pre tabindex="0"><code>$ sudo go-bpf-gen templates/tlssecrets.bt /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/3/fs/usr/local/bin/kube-apiserver | sudo bpftrace -
 
