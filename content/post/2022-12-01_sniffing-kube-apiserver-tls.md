@@ -80,6 +80,8 @@ $ sudo sh -c 'ls /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snap
 
 ## 関数位置の特定
 
+_(2023/5/13 追記: 関数位置の特定に関しては、この節で説明する方法ではなく、[GoReSym](https://github.com/mandiant/GoReSym) を使う方法でもっと簡単にできました。 `writeKeyLog` 関数について情報を得るには `-d` オプションが必要になる点に注意が必要です。得られた結果からアドレスを算出するには、出力されたJSONの `.TabMeta.VA` を `writeKeyLog` についての `Start` の値から引いたものに、.textセクションのアドレス `0x401000` を加えればよいです。このとき得られるのはシンボルテーブル上のアドレスに相当するものなので、ファイルオフセットを求める場合はそこから.textセクションのアドレスを引いて.textのオフセット `0x1000` を加えることになります。)_
+
 では `go-bpf-gen` を使う準備も整ったので、早速使ってみると、以下のように上手くいきません。
 
 ```
