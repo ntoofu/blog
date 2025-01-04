@@ -4,7 +4,7 @@ enableGitInfo = true
 
 # Use GitHub Pages
 baseURL = "https://ntoofu.github.io/blog/"
-publishDir = "docs"
+publishDir = "public"
 canonifyURLs = true
 
 # Copyright notice. Note: You can use HTML tag here
